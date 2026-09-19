@@ -4,6 +4,7 @@
  */
 const store = {};
 let loginCount = 0;
+global.getCurrentPages = () => [];
 
 global.wx = {
   getStorageSync: (k) => store[k],
@@ -11,6 +12,8 @@ global.wx = {
   removeStorageSync: (k) => { delete store[k]; },
   showToast: () => {},
   login: ({ success }) => { loginCount += 1; success({ code: 'miniapp-test-' + Date.now() }); },
+  reLaunch: ({ url }) => { store.__redirect = url; },
+  switchTab: ({ url }) => { store.__redirect = url; },
   request(options) {
     const url = options.url + (options.method === 'GET' || !options.data ? buildQuery(options.data) : '');
     const init = {
@@ -43,11 +46,14 @@ const results = [];
 const check = (name, ok, detail) => results.push((ok ? 'PASS ' : 'FAIL ') + name + ' — ' + detail);
 
 async function main() {
-  // 1. 静默登录
-  const token = await api.ensureLogin();
-  check('静默登录', Boolean(token) && loginCount === 1, 'wx.login 调用 ' + loginCount + ' 次，token 长度 ' + String(token).length);
+  // 1. 主动登录（不再静默建号，见 tests/miniapp-auth.test.cjs）
+  const code = await new Promise((resolve) => wx.login({ success: (res) => resolve(res.code) }));
+  const session = await api.wxLogin(code, { nickname: '集成测试同学' });
+  api.setupSession(session);
+  const token = api.getToken();
+  check('主动登录', Boolean(token) && loginCount === 1, 'wx.login 调用 ' + loginCount + ' 次，昵称 ' + session.user.nickname);
   const me = await api.me();
-  check('获取用户', Boolean(me && me.id), '昵称 ' + me.nickname);
+  check('获取用户', Boolean(me && me.id), '昵称 ' + me.nickname + '，角色 ' + session.user.role);
 
   // 2. 浏览
   const home = await api.home();

@@ -1,6 +1,6 @@
 import type { Component } from 'vue';
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
-import { ChatDotRound, DataLine, Goods, List, MagicStick, Notebook, RefreshLeft, Setting, User } from '@element-plus/icons-vue';
+import { ChatDotRound, DataLine, Goods, Key, List, MagicStick, Notebook, RefreshLeft, Setting, User } from '@element-plus/icons-vue';
 import { useAuthStore } from '../stores/auth';
 
 declare module 'vue-router' {
@@ -27,6 +27,7 @@ const layoutRoutes: RouteRecordRaw[] = [
   { path: 'orders', name: 'orders', component: () => import('../views/Orders.vue'), meta: { title: '订单管理', icon: List } },
   { path: 'after-sales', name: 'after-sales', component: () => import('../views/AfterSales.vue'), meta: { title: '售后管理', icon: RefreshLeft } },
   { path: 'users', name: 'users', component: () => import('../views/Users.vue'), meta: { title: '用户管理', icon: User } },
+  { path: 'login-logs', name: 'login-logs', component: () => import('../views/LoginLogs.vue'), meta: { title: '登录记录', icon: Key } },
   { path: ':pathMatch(.*)*', name: 'not-found', component: () => import('../views/NotFound.vue'), meta: { title: '页面不存在', hidden: true } },
 ];
 

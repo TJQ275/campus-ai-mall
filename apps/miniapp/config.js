@@ -10,8 +10,12 @@ const ENV = {
 
 const BASE_URL = ENV.dev;
 
+/** 电脑端管理后台地址：商家登录后在手机上看不到的部分（商品编辑、AI 配置）都在这里 */
+const ADMIN_URL = 'http://localhost:5173';
+
 module.exports = {
   BASE_URL,
+  ADMIN_URL,
   /** 图片资源前缀：后端静态托管的 /uploads 只给相对路径，必须补上源站才能塞进 <image src> */
   ASSET_URL: BASE_URL.replace(/\/api\/?$/, ''),
 };

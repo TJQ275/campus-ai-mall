@@ -1,0 +1,80 @@
+<view>
+  <view class="card header">
+    <view class="between">
+      <view>
+        <view class="who">{{nickname}}</view>
+        <view class="muted">商家工作台 · 手机端值班</view>
+      </view>
+      <view class="logout" bindtap="logout">退出</view>
+    </view>
+  </view>
+
+  <view class="kpi-grid">
+    <view class="kpi" wx:for="{{kpi}}" wx:key="label">
+      <view class="kpi-value">{{item.value}}</view>
+      <view class="kpi-label">{{item.label}}</view>
+    </view>
+  </view>
+
+  <!-- 商品编辑 / AI 配置：手机端做不了，给电脑端入口 -->
+  <view class="card">
+    <view class="section-title">商品与 AI 配置</view>
+    <view class="muted mt-12">
+      新增/编辑商品、设置价格与详情、上传商品图、一键配置大模型 API —— 这些在电脑浏览器里操作。
+    </view>
+    <view class="url-box" bindtap="copyAdminUrl">
+      <text class="url">{{adminUrl}}</text>
+      <text class="copy">复制</text>
+    </view>
+    <view class="muted mt-12">用同一个账号登录即可（默认 admin / admin123，记得改密码）</view>
+  </view>
+
+  <view class="card">
+    <view class="between">
+      <text class="section-title">待发货订单</text>
+      <text class="muted">{{orders.length}} 笔</text>
+    </view>
+    <view class="item" wx:for="{{orders}}" wx:key="id">
+      <view class="between">
+        <text class="muted">{{item.orderNo}}</text>
+        <text class="price">{{item.payText}}</text>
+      </view>
+      <view class="title">{{item.firstTitle}} 等 {{item.itemCount}} 件</view>
+      <view class="between">
+        <text class="muted" wx:if="{{item.source === 'ai'}}">AI 助手促成</text>
+        <text wx:else></text>
+        <view class="act primary" data-id="{{item.id}}" bindtap="ship">发货</view>
+      </view>
+    </view>
+    <view class="empty" wx:if="{{!loading && !orders.length}}">没有待发货订单</view>
+  </view>
+
+  <view class="card">
+    <view class="between">
+      <text class="section-title">待审核售后</text>
+      <text class="muted">{{afterSales.length}} 单</text>
+    </view>
+    <view class="item" wx:for="{{afterSales}}" wx:key="id">
+      <view class="between">
+        <text class="muted">{{item.afterSaleNo}}</text>
+        <text class="price">{{item.amountText}}</text>
+      </view>
+      <view class="title">{{item.type === 'return' ? '退货退款' : '仅退款'}} · {{item.reason}}</view>
+      <view class="muted" wx:if="{{item.description}}">{{item.description}}</view>
+      <view class="between actions">
+        <text class="muted" wx:if="{{item.source === 'ai'}}">AI 助手代提交</text>
+        <text wx:else></text>
+        <view class="act-group">
+          <view class="act" data-id="{{item.id}}" data-approve="false" bindtap="audit">拒绝</view>
+          <view class="act primary" data-id="{{item.id}}" data-approve="true" bindtap="audit">同意退款</view>
+        </view>
+      </view>
+    </view>
+    <view class="empty" wx:if="{{!loading && !afterSales.length}}">没有待处理售后</view>
+  </view>
+
+  <view class="pd-24">
+    <button class="btn-primary btn-block" bindtap="goShop">去逛商城</button>
+  </view>
+  <view class="h-40"></view>
+</view>

@@ -1,20 +1,36 @@
-const { request, ensureLogin, logout } = require('./request');
+const { request, ensureLogin, logout, setupSession, getToken, getUser, getRole } = require('./request');
+
+/** 拼查询串：自动跳过空值 */
+function qs(params) {
+  const parts = [];
+  Object.keys(params || {}).forEach((key) => {
+    const value = params[key];
+    if (value !== undefined && value !== null && value !== '') parts.push(key + '=' + encodeURIComponent(value));
+  });
+  return parts.length ? '?' + parts.join('&') : '';
+}
 
 const api = {
+  // 会话
   ensureLogin,
   logout,
+  setupSession,
+  getToken,
+  getUser,
+  getRole,
+
+  // 登录（needAuth: false —— 登录本身当然不能要求先登录）
+  wxLogin: (code, profile) =>
+    request({ url: '/auth/wx/login', method: 'POST', data: Object.assign({ code }, profile || {}), needAuth: false }),
+  adminLogin: (username, password) =>
+    request({ url: '/auth/admin/login', method: 'POST', data: { username, password }, needAuth: false }),
+  updateMe: (data) => request({ url: '/auth/me', method: 'PATCH', data }),
+  uploadImage: (dataUrl) => request({ url: '/upload', method: 'POST', data: { dataUrl } }),
 
   // 商品
-  home: (kind) => request({ url: '/home' + (kind ? '?kind=' + kind : '') }),
-  categories: (kind) => request({ url: '/categories' + (kind ? '?kind=' + kind : ''), needAuth: false }),
-  products: (query) => {
-    const parts = [];
-    Object.keys(query || {}).forEach((key) => {
-      const value = query[key];
-      if (value !== undefined && value !== null && value !== '') parts.push(key + '=' + encodeURIComponent(value));
-    });
-    return request({ url: '/products' + (parts.length ? '?' + parts.join('&') : ''), needAuth: false });
-  },
+  home: (kind) => request({ url: '/home' + qs({ kind }) }),
+  categories: (kind) => request({ url: '/categories' + qs({ kind }), needAuth: false }),
+  products: (query) => request({ url: '/products' + qs(query), needAuth: false }),
   productDetail: (id) => request({ url: '/products/' + id }),
   reviews: (productId) => request({ url: '/products/' + productId + '/reviews', needAuth: false }),
 
@@ -27,15 +43,7 @@ const api = {
   // 订单
   orderPreview: () => request({ url: '/orders/preview' }),
   createOrder: (data) => request({ url: '/orders', method: 'POST', data }),
-  /** 订单分页：返回 { list, total, page, pageSize }，不再是裸数组 */
-  orders: (status, page, pageSize) => {
-    const parts = [];
-    if (status && status !== 'all') parts.push('status=' + encodeURIComponent(status));
-    if (page) parts.push('page=' + page);
-    if (pageSize) parts.push('pageSize=' + pageSize);
-    return request({ url: '/orders' + (parts.length ? '?' + parts.join('&') : '') });
-  },
-  /** 各状态订单数：一次聚合查询，替代拉全量订单在本地数 */
+  orders: (status, page, pageSize) => request({ url: '/orders' + qs({ status: status === 'all' ? '' : status, page, pageSize }) }),
   orderSummary: () => request({ url: '/orders/summary' }),
   orderDetail: (id) => request({ url: '/orders/' + id }),
   payOrder: (id, channel) => request({ url: '/orders/' + id + '/pay', method: 'POST', data: { channel } }),
@@ -44,7 +52,7 @@ const api = {
 
   // 售后
   applyAfterSale: (data) => request({ url: '/after-sales', method: 'POST', data }),
-  afterSales: (status) => request({ url: '/after-sales' + (status ? '?status=' + status : '') }),
+  afterSales: (status) => request({ url: '/after-sales' + qs({ status }) }),
   cancelAfterSale: (id) => request({ url: '/after-sales/' + id + '/cancel', method: 'POST' }),
 
   // 地址 / 钱包 / 我的
@@ -60,7 +68,17 @@ const api = {
   aiStatus: () => request({ url: '/ai/status' }),
   confirmAction: (actionId, decision) =>
     request({ url: '/ai/actions/' + actionId + '/confirm', method: 'POST', data: { decision } }),
-  aiChatSync: (data) => request({ url: '/ai/chat/sync', method: 'POST', data, header: { 'content-type': 'application/json' } }),
+  aiChatSync: (data) => request({ url: '/ai/chat/sync', method: 'POST', data }),
+
+  // 商家端（手机值班用：看订单、发货、审售后）
+  merchantOverview: () => request({ url: '/admin/orders/dashboard' }),
+  merchantOrders: (params) => request({ url: '/admin/orders' + qs(params) }),
+  merchantShip: (id) => request({ url: '/admin/orders/' + id + '/ship', method: 'POST' }),
+  merchantAfterSales: (params) => request({ url: '/admin/after-sales' + qs(params) }),
+  merchantAudit: (id, approve, remark) =>
+    request({ url: '/admin/after-sales/' + id + '/audit', method: 'POST', data: { approve, remark } }),
+  merchantAiStats: () => request({ url: '/admin/ai/stats' }),
+  merchantLoginLogs: (params) => request({ url: '/admin/login-logs' + qs(params) }),
 };
 
 module.exports = api;

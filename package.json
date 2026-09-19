@@ -20,7 +20,7 @@
     "ai:embed": "pnpm --filter @campus/server ai:embed",
     "dev:admin": "pnpm --filter @campus/admin dev",
     "build:admin": "pnpm --filter @campus/admin build",
-    "test:miniapp": "node tests/miniapp-wxml.test.cjs && node tests/miniapp-login-race.test.cjs && node tests/miniapp-sse.test.cjs && node tests/miniapp-api.test.cjs",
+    "test:miniapp": "node tests/miniapp-wxml.test.cjs && node tests/miniapp-auth.test.cjs && node tests/miniapp-sse.test.cjs && node tests/miniapp-api.test.cjs",
     "dev:miniapp": "echo 用微信开发者工具打开 apps/miniapp 目录",
     "db:reset": "pnpm --filter @campus/server db:reset",
     "test:acceptance": "node tests/acceptance.test.cjs",

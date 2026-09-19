@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { and, asc, desc, eq, gte, ilike, or, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
-import { categories, orderItems, products, users, walletLogs } from '../../db/schema/index.js';
+import { categories, loginLogs, orderItems, products, users, walletLogs } from '../../db/schema/index.js';
 import { CatalogService } from '../catalog/catalog.service.js';
 
 /** 管理端的商品 / 分类 / 用户维护 */
@@ -155,6 +155,26 @@ export class AdminShopService {
     const created = await this.db.insert(categories).values(patch as never).returning();
     this.catalog.clearCategoryCache();
     return created[0];
+  }
+
+  /** 登录记录：谁在什么时候用哪个账号登录、成功还是失败 */
+  async loginLogList(params: { keyword?: string; result?: string; page?: number; pageSize?: number }) {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.min(100, Math.max(1, params.pageSize ?? 20));
+    const conditions = [];
+    if (params.result === 'ok') conditions.push(eq(loginLogs.success, true));
+    if (params.result === 'fail') conditions.push(eq(loginLogs.success, false));
+    if (params.keyword) conditions.push(ilike(loginLogs.username, '%' + params.keyword + '%')!);
+    const where = conditions.length ? and(...conditions) : undefined;
+    const list = await this.db
+      .select()
+      .from(loginLogs)
+      .where(where)
+      .orderBy(desc(loginLogs.id))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+    const counted = await this.db.select({ total: sql<number>`count(*)::int` }).from(loginLogs).where(where);
+    return { list, total: counted[0]?.total ?? 0, page, pageSize };
   }
 
   async userList(params: { keyword?: string; role?: string; page?: number; pageSize?: number }) {

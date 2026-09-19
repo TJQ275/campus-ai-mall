@@ -56,6 +56,7 @@ export const api = {
   productStatus: (id: number, status: string) => post('/admin/products/' + id + '/status', { status }),
   /** 新增 or 更新商品：带 id 即更新 */
   productSave: (body: Record<string, unknown>) => post<Record<string, any>>('/admin/products', body),
+  loginLogs: (params: ListParams, signal?: AbortSignal) => get<PageResult<Record<string, any>>>('/admin/login-logs', params, signal),
   productRemove: (id: number) => del<{ removed: boolean; id: number; title: string }>('/admin/products/' + id),
   categories: () => get<Record<string, any>[]>('/admin/categories'),
 

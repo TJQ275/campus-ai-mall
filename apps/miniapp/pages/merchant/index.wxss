@@ -1,0 +1,27 @@
+.header { background: linear-gradient(135deg, #e8fff3, #f0f9ff); }
+.who { font-size: 36rpx; font-weight: 700; }
+.logout { color: #969799; font-size: 26rpx; padding: 8rpx 16rpx; }
+.kpi-grid { display: flex; flex-wrap: wrap; margin: 20rpx 20rpx 0; }
+.kpi {
+  width: 33.33%; box-sizing: border-box; padding: 20rpx 0; text-align: center;
+  background: #fff; border-right: 1rpx solid #f2f3f5; border-bottom: 1rpx solid #f2f3f5;
+}
+.kpi-value { font-size: 32rpx; font-weight: 700; color: #07c160; }
+.kpi-label { font-size: 22rpx; color: #969799; margin-top: 6rpx; }
+.section-title { font-size: 30rpx; font-weight: 700; }
+.url-box {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-top: 16rpx; padding: 20rpx 24rpx; background: #f7f8fa; border-radius: 12rpx;
+}
+.url { font-size: 26rpx; color: #323233; }
+.copy { font-size: 24rpx; color: #07c160; }
+.item { padding: 20rpx 0; border-bottom: 1rpx solid #f2f3f5; }
+.item:last-child { border-bottom: none; }
+.title { font-size: 28rpx; margin: 8rpx 0; }
+.actions { margin-top: 12rpx; }
+.act-group { display: flex; }
+.act {
+  border: 1rpx solid #ddd; border-radius: 999rpx; padding: 10rpx 28rpx;
+  font-size: 26rpx; color: #646566; margin-left: 12rpx;
+}
+.act.primary { border-color: #07c160; color: #07c160; }

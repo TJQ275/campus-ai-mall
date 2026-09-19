@@ -1,0 +1,50 @@
+<view class="page">
+  <view class="brand">
+    <view class="logo">优</view>
+    <view class="title">AI优选零食</view>
+    <view class="slogan">说一句想吃什么，AI 帮你优选好</view>
+  </view>
+
+  <view class="role-switch">
+    <view class="role {{role === 'user' ? 'role-on' : ''}}" data-role="user" bindtap="switchRole">我是买家</view>
+    <view class="role {{role === 'admin' ? 'role-on' : ''}}" data-role="admin" bindtap="switchRole">我是商家</view>
+  </view>
+
+  <!-- 买家：微信一键登录，顺带把昵称头像填成真实数据 -->
+  <view class="card" wx:if="{{role === 'user'}}">
+    <view class="avatar-row">
+      <button class="avatar-btn" open-type="chooseAvatar" bindchooseavatar="onChooseAvatar">
+        <image wx:if="{{avatarUrl}}" class="avatar" src="{{avatarUrl}}" mode="aspectFill" />
+        <view wx:else class="avatar avatar-empty">+</view>
+      </button>
+      <input
+        class="nickname"
+        type="nickname"
+        placeholder="点这里填昵称"
+        value="{{nickname}}"
+        bindinput="onNickname"
+        bindblur="onNickname"
+      />
+    </view>
+    <view class="tip">填了昵称头像，评价和订单里显示的就是你，不是「同学3204」</view>
+    <button class="btn-primary btn-block login-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="userLogin">
+      微信一键登录
+    </button>
+  </view>
+
+  <!-- 商家：账号密码登录 -->
+  <view class="card" wx:else>
+    <view class="field">
+      <text class="label">账号</text>
+      <input class="input" value="{{username}}" data-key="username" bindinput="onField" placeholder="管理员账号" />
+    </view>
+    <view class="field">
+      <text class="label">密码</text>
+      <input class="input" password value="{{password}}" data-key="password" bindinput="onField" placeholder="密码" />
+    </view>
+    <button class="btn-primary btn-block login-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="adminLogin">
+      商家登录
+    </button>
+    <view class="tip">登录后可查订单、发货、审核售后；<text class="strong">商品编辑</text>和<text class="strong">AI 配置</text>请在电脑浏览器打开管理后台</view>
+  </view>
+</view>

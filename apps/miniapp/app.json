@@ -1,5 +1,6 @@
 {
   "pages": [
+    "pages/login/index",
     "pages/index/index",
     "pages/category/index",
     "pages/cart/index",
@@ -13,7 +14,8 @@
     "pages/after-sale/apply",
     "pages/after-sale/list",
     "pages/address/list",
-    "pages/address/edit"
+    "pages/address/edit",
+    "pages/merchant/index"
   ],
   "window": {
     "backgroundTextStyle": "light",
@@ -28,11 +30,26 @@
     "backgroundColor": "#FFFFFF",
     "borderStyle": "black",
     "list": [
-      { "pagePath": "pages/index/index", "text": "首页" },
-      { "pagePath": "pages/category/index", "text": "分类" },
-      { "pagePath": "pages/cart/index", "text": "购物车" },
-      { "pagePath": "pages/ai/chat", "text": "AI 助手" },
-      { "pagePath": "pages/mine/index", "text": "我的" }
+      {
+        "pagePath": "pages/index/index",
+        "text": "首页"
+      },
+      {
+        "pagePath": "pages/category/index",
+        "text": "分类"
+      },
+      {
+        "pagePath": "pages/cart/index",
+        "text": "购物车"
+      },
+      {
+        "pagePath": "pages/ai/chat",
+        "text": "AI 助手"
+      },
+      {
+        "pagePath": "pages/mine/index",
+        "text": "我的"
+      }
     ]
   },
   "networkTimeout": {

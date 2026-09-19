@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Headers, Post, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Headers, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminLoginRequest, WxLoginRequest } from '@campus/shared';
 import { AuthService } from './auth.service.js';
@@ -38,5 +38,12 @@ export class AuthController {
   @ApiOperation({ summary: '当前登录用户' })
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user.sub);
+  }
+
+  @Patch('me')
+  @UseGuards(JwtAuthGuard)
+  @ApiOperation({ summary: '更新我的昵称 / 头像（头像先走 /upload 拿到 URL）' })
+  updateMe(@CurrentUser() user: AuthUser, @Body() body: { nickname?: string; avatar?: string }) {
+    return this.auth.updateProfile(user.sub, body);
   }
 }

@@ -1,0 +1,24 @@
+.page { min-height: 100vh; padding: 0 40rpx; box-sizing: border-box; background: linear-gradient(180deg, #e8fff3 0%, #f6f6f6 40%); }
+.brand { padding: 120rpx 0 60rpx; text-align: center; }
+.logo {
+  width: 120rpx; height: 120rpx; line-height: 120rpx; margin: 0 auto 24rpx;
+  background: #07c160; color: #fff; font-size: 56rpx; font-weight: 700; border-radius: 32rpx;
+}
+.title { font-size: 44rpx; font-weight: 700; letter-spacing: 2rpx; }
+.slogan { margin-top: 12rpx; color: #969799; font-size: 26rpx; }
+.role-switch { display: flex; background: #fff; border-radius: 16rpx; padding: 8rpx; margin-bottom: 24rpx; }
+.role { flex: 1; text-align: center; padding: 20rpx 0; font-size: 28rpx; color: #646566; border-radius: 12rpx; }
+.role-on { background: #07c160; color: #fff; font-weight: 700; }
+.card { background: #fff; border-radius: 20rpx; padding: 40rpx 32rpx; }
+.avatar-row { display: flex; align-items: center; }
+.avatar-btn { padding: 0; margin: 0 24rpx 0 0; background: transparent; line-height: 1; width: 120rpx; }
+.avatar-btn::after { border: none; }
+.avatar { width: 120rpx; height: 120rpx; border-radius: 50%; background: #f2f3f5; }
+.avatar-empty { display: flex; align-items: center; justify-content: center; color: #c8c9cc; font-size: 48rpx; }
+.nickname { flex: 1; height: 88rpx; background: #f7f8fa; border-radius: 12rpx; padding: 0 24rpx; font-size: 28rpx; }
+.field { display: flex; align-items: center; padding: 20rpx 0; border-bottom: 1rpx solid #f2f3f5; }
+.label { width: 120rpx; color: #646566; font-size: 28rpx; }
+.input { flex: 1; height: 72rpx; font-size: 28rpx; }
+.login-btn { margin-top: 40rpx; }
+.tip { margin-top: 24rpx; color: #969799; font-size: 24rpx; line-height: 1.7; }
+.strong { color: #07c160; }

@@ -159,6 +159,15 @@ export class AdminShopController {
     return this.shop.userUpdate(id, body);
   }
 
+  @Get('login-logs')
+  @ApiOperation({ summary: '登录记录（分页，可按账号与结果筛选）' })
+  loginLogs(@Query() q: Record<string, string>) {
+    return this.shop.loginLogList({
+      keyword: q.keyword, result: q.result,
+      page: q.page ? Number(q.page) : 1, pageSize: q.pageSize ? Number(q.pageSize) : 20,
+    });
+  }
+
   @Post('users/:id/balance')
   @ApiOperation({ summary: '调整余额（单位：分，可为负）' })
   adjustBalance(@Param('id', ParseIntPipe) id: number, @Body() body: { amountCents: number; remark?: string }) {

@@ -286,6 +286,18 @@ async function main() {
   const stillWorks = await call('POST', '/auth/admin/login', { username: 'admin', password: 'admin123' });
   check('刷其他账号不会锁死管理员', stillWorks.code === 0 && Boolean(stillWorks.data && stillWorks.data.token), '管理员仍可正常登录');
 
+  console.log('\n=== 11. 登录记录（后台「登录记录」页的数据来源）===');
+  const logs = await call('GET', '/admin/login-logs?pageSize=5', undefined, true);
+  check('登录记录可查', logs.code === 0 && logs.data.total > 0, '共 ' + (logs.data && logs.data.total) + ' 条');
+
+  const failedLogs = await call('GET', '/admin/login-logs?result=fail&pageSize=5', undefined, true);
+  const allFailed = (failedLogs.data && failedLogs.data.list ? failedLogs.data.list : []).every((l) => l.success === false);
+  check('可按「失败」筛选', failedLogs.code === 0 && allFailed, '失败记录 ' + (failedLogs.data && failedLogs.data.total) + ' 条');
+
+  const okLogs = await call('GET', '/admin/login-logs?result=ok&pageSize=5', undefined, true);
+  const allOk = (okLogs.data && okLogs.data.list ? okLogs.data.list : []).every((l) => l.success === true);
+  check('可按「成功」筛选', okLogs.code === 0 && allOk, '成功记录 ' + (okLogs.data && okLogs.data.total) + ' 条');
+
   const summaryLine = results.filter((r) => r.ok).length + ' 项，失败 ' + results.filter((r) => !r.ok).length + ' 项';
   console.log('\n================================');
   console.log('加固验收合计 ' + summaryLine);

@@ -99,6 +99,24 @@ export class AuthService {
     return data.openid;
   }
 
+  /**
+   * 更新个人资料。
+   * 头像要求先走 POST /upload 拿到 URL 再传进来 —— 小程序的 chooseAvatar 给的是本地临时路径，
+   * 直接用会在下次进入时失效。
+   */
+  async updateProfile(userId: number, input: { nickname?: string; avatar?: string }) {
+    const patch: Record<string, unknown> = {};
+    if (typeof input.nickname === 'string' && input.nickname.trim()) {
+      patch.nickname = input.nickname.trim().slice(0, 50);
+    }
+    if (typeof input.avatar === 'string' && input.avatar) {
+      patch.avatar = input.avatar.slice(0, 500);
+    }
+    if (!Object.keys(patch).length) return this.me(userId);
+    await this.db.update(users).set(patch).where(eq(users.id, userId));
+    return this.me(userId);
+  }
+
   /** 当前登录用户 + 画像（前台「我的」与 AI 都需要） */
   async me(userId: number) {
     const found = await this.db.select().from(users).where(eq(users.id, userId)).limit(1);
