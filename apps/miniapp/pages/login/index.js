@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
 const { showError } = require('../../utils/ui');
+const { BASE_URL, ENV_NAME } = require('../../config');
 
 Page({
   data: {
@@ -12,6 +13,9 @@ Page({
     // 商家：预填演示账号，和管理后台登录页保持一致；接手后第一件事就是改密码
     username: 'admin',
     password: 'admin123',
+    // 真机上没控制台，把当前连的后端显示出来，连不上时一眼能看出是哪套环境
+    apiHost: BASE_URL.replace(/^https?:\/\//, '').replace(/\/api\/?$/, ''),
+    envName: ENV_NAME,
   },
 
   onLoad() {

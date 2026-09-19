@@ -29,3 +29,4 @@
 .hint-value { font-size: 28rpx; font-weight: 700; color: #323233; letter-spacing: 1rpx; }
 .tip { margin-top: 24rpx; color: #969799; font-size: 24rpx; line-height: 1.7; }
 .strong { color: #07c160; }
+.env-hint { margin: 32rpx 0 40rpx; text-align: center; color: #c8c9cc; font-size: 22rpx; }

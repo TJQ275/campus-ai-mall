@@ -9,7 +9,7 @@
     "es6": true,
     "enhance": false,
     "postcss": true,
-    "minified": false,
+    "minified": true,
     "bigPackageSizeSupport": true,
     "compileWorklet": false,
     "uglifyFileName": false,
