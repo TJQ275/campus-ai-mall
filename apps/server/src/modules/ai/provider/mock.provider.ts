@@ -52,7 +52,25 @@ export class MockProvider implements LlmProvider {
     const call = (name: string, args: Record<string, unknown>): LlmToolCall | null =>
       available.has(name) ? { id, name, arguments: args, rawArguments: JSON.stringify(args) } : null;
 
-    if (/(退款政策|怎么退|能退吗|政策|规则|多久到账|多久能到|时效|配送|运费|优惠券|回收|成色|流程)/.test(text)) {
+    // ── 商家侧意图 ──
+    if (/(文案|卖点|详情页|写一段|推广语|标题怎么写)/.test(text)) return call('generate_copywriting', {});
+    if (/(卖得最好|热销|销量排行|排行|趋势|退款统计|用户增长|AI ?促成|环比|数据)/.test(text)) {
+      const metric = /热销|卖得最好|排行/.test(text)
+        ? 'top_products'
+        : /趋势/.test(text)
+          ? 'sales_trend'
+          : /退款/.test(text)
+            ? 'refund_stats'
+            : /用户/.test(text)
+              ? 'user_growth'
+              : /AI ?促成/.test(text)
+                ? 'ai_orders'
+                : 'category_sales';
+      return call('query_business_data', { metric });
+    }
+    if (/(生意|经营|营收|销售额|最近怎么样|整体情况|概览)/.test(text)) return call('get_business_overview', {});
+
+    if (/(退款政策|怎么退|能退吗|政策|规则|多久到账|多久能到|时效|配送|运费|优惠券|回收|成色|流程|发票|开票)/.test(text)) {
       return call('search_knowledge', { query: text });
     }
     const isbn = /(\d[\d\-\s]{9,17}[\dXx])/.exec(text)?.[1]?.replace(/[^0-9Xx]/g, '');
@@ -194,6 +212,30 @@ export class MockProvider implements LlmProvider {
     }
     if (payload.status === 'pending_user_confirmation') {
       return '已经准备好了：' + String(payload.summary ?? '') + '。点下面的确认按钮就生效，不想加也没关系。';
+    }
+    if (toolName === 'get_business_overview') {
+      const kpi = (payload.kpi ?? {}) as Record<string, unknown>;
+      return '目前共 ' + String(kpi.order_count ?? 0) + ' 笔订单、成交 ' + String(kpi.paid ?? '¥0.00') + '，待处理售后 ' + String(kpi.pending_after_sale ?? 0) + ' 单，其中 AI 助手促成的订单占 ' + String(kpi.aiOrderRatio ?? '0%') + '。要不要我再看某个指标的趋势？';
+    }
+    if (toolName === 'query_business_data') {
+      const list = (payload.list ?? []) as Record<string, unknown>[];
+      const metric = String(payload.metric ?? '');
+      if (!list.length) return '这个区间还没有数据。';
+      if (metric === 'top_products') {
+        return '卖得最好的是：' + list.slice(0, 3).map((r) => String(r.title) + '（' + String(r.qty) + ' 件）').join('、') + '。';
+      }
+      if (metric === 'ai_orders') {
+        return '订单来源分布：' + list.map((r) => (r.source === 'ai' ? 'AI 助手 ' : '用户自主 ') + String(r.count) + ' 单').join('、') + '。';
+      }
+      if (metric === 'refund_stats') {
+        return '售后情况：' + list.map((r) => String(r.status) + ' ' + String(r.count) + ' 单').join('、') + '。';
+      }
+      return '统计结果（' + metric + '）：' + list.slice(0, 5).map((r) => JSON.stringify(r)).join('、').slice(0, 120) + '。';
+    }
+    if (toolName === 'generate_copywriting') {
+      if (payload.needProduct) return String(payload.hint ?? '请先告诉我商品。');
+      const points = (payload.sellingPoints ?? []) as string[];
+      return '给你写了一版：标题「' + String(payload.title ?? '') + '」；卖点：' + points.join('；') + '。详情描述：' + String(payload.description ?? '').slice(0, 80) + '。';
     }
     if (toolName === 'search_knowledge') {
       const chunks = (payload.chunks ?? []) as { title: string; source?: string; content: string }[];

@@ -16,6 +16,8 @@
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
     "lint": "pnpm -r lint",
-    "ai:embed": "pnpm --filter @campus/server ai:embed"
+    "ai:embed": "pnpm --filter @campus/server ai:embed",
+    "dev:admin": "pnpm --filter @campus/admin dev",
+    "build:admin": "pnpm --filter @campus/admin build"
   }
 }

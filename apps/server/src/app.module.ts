@@ -12,6 +12,7 @@ import { WalletModule } from './modules/wallet/wallet.module.js';
 import { AiModule } from './modules/ai/ai.module.js';
 import { ReviewModule } from './modules/review/review.module.js';
 import { UploadModule } from './modules/upload/upload.module.js';
+import { AdminModule } from './modules/admin/admin.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
@@ -33,6 +34,7 @@ import { HealthModule } from './modules/health/health.module.js';
     AiModule,
     ReviewModule,
     UploadModule,
+    AdminModule,
     HealthModule,
   ],
 })

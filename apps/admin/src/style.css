@@ -1,0 +1,52 @@
+body {
+  margin: 0;
+  font-family: -apple-system, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+  background: #f5f7fa;
+  color: #303133;
+}
+.page-title {
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0 0 16px;
+}
+.toolbar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+.kpi-value {
+  font-size: 26px;
+  font-weight: 700;
+  color: #1f2d3d;
+}
+.kpi-label {
+  color: #909399;
+  font-size: 13px;
+  margin-top: 6px;
+}
+.json-box {
+  background: #0f172a;
+  color: #a5f3fc;
+  padding: 12px;
+  border-radius: 6px;
+  font-family: Consolas, Monaco, monospace;
+  font-size: 12px;
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 320px;
+  overflow: auto;
+}
+.chat-bubble {
+  padding: 10px 12px;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  white-space: pre-wrap;
+  line-height: 1.6;
+  font-size: 13px;
+}
+.chat-user { background: #ecf5ff; }
+.chat-assistant { background: #f4f4f5; }
+.chat-tool { background: #fdf6ec; border-left: 3px solid #e6a23c; }
+.muted { color: #909399; font-size: 12px; }
