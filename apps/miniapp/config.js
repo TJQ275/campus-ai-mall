@@ -27,7 +27,8 @@ function detectEnv() {
     // getDeviceInfo 是新接口；老基础库退回 getSystemInfoSync
     const platform = wx.getDeviceInfo ? wx.getDeviceInfo().platform : wx.getSystemInfoSync().platform;
     return platform === 'devtools' ? 'dev' : 'device';
-  } catch (err) {
+  } catch {
+    // 拿不到设备信息（极老的基础库）就按模拟器处理，至少能连上 localhost
     return 'dev';
   }
 }

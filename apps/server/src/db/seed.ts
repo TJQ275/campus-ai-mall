@@ -19,14 +19,21 @@ async function main() {
   await ensureVectorExtension(handle);
   console.log('[seed] driver =', handle.driver);
 
-  // 幂等：先清空业务数据（保留表结构）
+  // 幂等：先清空业务数据（保留表结构）。
+  //
+  // ⚠️ 这里**刻意不 truncate sys_config**。
+  // sys_config 存的是「配置」不是「演示数据」，里面有大模型 API Key、日预算这些
+  // 由管理员在后台填的东西。早先它在这个 truncate 列表里，后果是：
+  // 任何人重灌一次演示数据（pnpm db:seed / pnpm db:reset / 交付后恢复数据），
+  // 后台配好的 API Key 就被静默删掉，而且因为 Key 从不回显明文，找都找不回来。
+  // 配置表永远用 upsert 维护，不要删。
   await db.execute(sql`
     truncate table
       ai_feedback, ai_pending_action, ai_tool_call, ai_message, ai_conversation, ai_knowledge,
       wallet_log, after_sale, payment, order_item, \"order\", cart_item, review_summary, review,
       product_tag, tag, product_image, product_sku, product, category,
       user_behavior, address, user_profile, app_user,
-      operation_log, login_log, notification, sys_config, sys_menu
+      operation_log, login_log, notification, sys_menu
     restart identity cascade
   `);
 
@@ -346,11 +353,17 @@ async function main() {
     { name: 'AI 知识库', path: '/ai/knowledge', icon: 'Notebook', sort: 8 },
     { name: '系统日志', path: '/system/log', icon: 'Document', sort: 9 },
   ]);
-  await db.insert(t.sysConfigs).values([
-    { key: 'llm.enabled', value: 'true', remark: 'AI 助手总开关' },
-    { key: 'llm.provider', value: 'openai-compatible', remark: '兼容 OpenAI 协议的任意服务' },
-    { key: 'ai.autoConfirmWrite', value: 'false', remark: '写操作是否需要用户二次确认' },
-  ]);
+  // 用 upsert 而不是 insert：重复灌数据不会因为主键冲突失败，
+  // 也不会覆盖掉管理员已经改过的值（onConflictDoNothing）。
+  // 只有这三条「默认配置」缺席时才补上，其余 llm.* 由后台管理。
+  await db
+    .insert(t.sysConfigs)
+    .values([
+      { key: 'llm.enabled', value: 'true', remark: 'AI 助手总开关' },
+      { key: 'llm.provider', value: 'openai-compatible', remark: '兼容 OpenAI 协议的任意服务' },
+      { key: 'ai.autoConfirmWrite', value: 'false', remark: '写操作是否需要用户二次确认' },
+    ])
+    .onConflictDoNothing({ target: t.sysConfigs.key });
 
   const counts = await db.execute(sql`
     select

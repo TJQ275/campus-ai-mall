@@ -118,7 +118,8 @@
       <template #header>
         <div class="card-head">
           <span>模型价目表</span>
-          <span class="muted">版本 {{ prices?.version }}　美元汇率 {{ prices?.usdToCny }}</span>
+          <!-- 这里原来用的是全角空格做分隔，ESLint 的 no-irregular-whitespace 不允许；改用 · 与页面其它位置保持一致 -->
+          <span class="muted">版本 {{ prices?.version }} · 美元汇率 {{ prices?.usdToCny }}</span>
         </div>
       </template>
       <p class="muted">金额单位是「每百万 token」。账单对不上时改 apps/server/src/modules/ai/pricing.ts。</p>

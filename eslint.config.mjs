@@ -23,6 +23,14 @@ export default tseslint.config(
       '**/*.d.ts',
       'apps/server/drizzle/**',
       'apps/admin/src/types/**',
+      // 评测脚本的编译产物（pnpm ai:eval 生成，已在 .gitignore 里）。
+      // 漏掉它的后果很隐蔽：本地 lint 会去扫这些 .js 产物、报一堆 error，
+      // 而 CI 上这些文件根本不存在，报的却是另外几个真错 —— 两边都飘红，原因完全不同。
+      'apps/server/.eval-build/**',
+      'apps/server/.eval/**',
+      // Python（重排服务）的缓存
+      '**/__pycache__/**',
+      '**/.pytest_cache/**',
     ],
   },
 
@@ -103,6 +111,15 @@ export default tseslint.config(
     rules: {
       'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
       'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+
+  // ── 小程序的测试脚本：跑在 Node 里，但会 stub 微信的 wx 全局对象 ──
+  {
+    files: ['tests/miniapp-*.cjs'],
+    languageOptions: {
+      globals: { ...globals.node, wx: 'readonly' },
+      parserOptions: { ecmaVersion: 2023, sourceType: 'script' },
     },
   },
 

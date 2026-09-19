@@ -55,8 +55,10 @@ Page({
 
   async loadStatus() {
     try {
-      const status = await api.aiStatus();
-      // 面向买家不暴露「演示模式 / 降级」这类内部状态，卖家在后台「AI 设置」里能直接看到当前模式
+      // 这里只用来**探活**：接口能返回就说明后端活着。
+      // 返回值刻意不使用 —— 面向买家不暴露「演示模式 / 降级」这类内部状态，
+      // 卖家在后台「AI 设置」页能直接看到当前模式。
+      await api.aiStatus();
       this.setData({ statusText: '' });
     } catch {
       this.setData({ statusText: '后端未连接' });

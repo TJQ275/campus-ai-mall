@@ -55,7 +55,7 @@ Page({
           try {
             const uploaded = await api.uploadImage('data:' + mime + ';base64,' + res.data);
             resolve(uploaded.url);
-          } catch (err) {
+          } catch {
             resolve(''); // 头像上传失败不该挡住登录
           }
         },

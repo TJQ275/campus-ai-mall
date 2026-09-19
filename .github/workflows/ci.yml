@@ -47,17 +47,31 @@ jobs:
           DB_DRIVER: pglite
         run: pnpm --filter @campus/server db:push && pnpm --filter @campus/server db:seed
 
+      # 刻意不用 pnpm dev:server：那是 nest start --watch，
+      # 在 CI 里既会一直挂着不退、又没有任何热更新的意义。
+      # 改成「先编译、再用 node 跑产物」，行为更接近真实部署。
+      - name: 构建后端
+        run: pnpm --filter @campus/server build
+
+      # nohup + & 让服务活过当前 step（GitHub Actions 每个 run: 是独立 shell，
+      # 直接 `pnpm dev:server &` 起的进程可能在这一步结束时被回收，后续步骤就连不上了）。
       - name: 启动后端
         env:
           DB_DRIVER: pglite
           JWT_SECRET: ci-only-secret-not-used-in-production
         run: |
-          pnpm dev:server &
+          cd apps/server
+          nohup node dist/main.js > /tmp/server.log 2>&1 &
           for i in $(seq 1 60); do
-            if curl -sf http://localhost:3100/api/health > /dev/null; then echo "后端就绪"; exit 0; fi
+            if curl -sf http://localhost:3100/api/health > /dev/null; then
+              echo "后端就绪（第 $((i*2)) 秒）"
+              exit 0
+            fi
             sleep 2
           done
-          echo "后端启动超时"; exit 1
+          echo '::error::后端启动超时，服务日志如下'
+          cat /tmp/server.log
+          exit 1
 
       - name: 全链路验收
         run: pnpm test:acceptance
@@ -67,6 +81,19 @@ jobs:
 
       - name: 小程序端测试
         run: pnpm test:miniapp
+
+      # 重排服务的测试是纯算法（BM25 / RRF），但补一条「应用能导入」的冒烟检查，
+      # 否则依赖装漏了、路由写错了，单元测试照样全绿。
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 重排服务测试（Python）
+        run: |
+          cd services/rerank
+          pip install -q -r requirements.txt
+          python -m pytest -q
+          python -c "from app.main import app; print('FastAPI 应用导入成功：', app.title)"
 
       # 只有配了 Key 才跑真实评测；评测脚本内部会在没有 Key 时走 Mock
       - name: AI 评测（有 Key 时启用退步门禁）
