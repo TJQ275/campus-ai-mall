@@ -2,7 +2,7 @@
   "name": "campus-ai-mall",
   "private": true,
   "version": "0.1.0",
-  "description": "校园零食 + 二手书 AI 商城：原生微信小程序 / NestJS 后端 / Vue3 管理后台",
+  "description": "AI优选零食：校园零食 + 二手教材商城，AI 助手为核心（原生微信小程序 / NestJS / Vue3 管理后台）",
   "packageManager": "pnpm@11.5.2",
   "engines": {
     "node": ">=20"

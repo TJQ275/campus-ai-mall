@@ -1,7 +1,7 @@
 <template>
   <el-container style="min-height: 100vh">
     <el-aside width="220px" style="background: #1f2d3d">
-      <div class="brand">校园 AI 商城</div>
+      <div class="brand">AI优选零食</div>
       <el-menu
         :default-active="route.path"
         router

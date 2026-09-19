@@ -182,7 +182,7 @@ export class AdminAiService {
           {
             role: 'user',
             content:
-              '以下是校园商城的真实经营数据，请用不超过 120 字给出解读和一条可执行建议，不要编造数字：\n' + facts.join('\n'),
+              '以下是「AI优选零食」的真实经营数据，请用不超过 120 字给出解读和一条可执行建议，不要编造数字：\n' + facts.join('\n'),
           },
         ],
         [],

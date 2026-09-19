@@ -20,7 +20,7 @@ async function bootstrap() {
 
   // 接口文档：http://localhost:3100/api/docs —— 交付时直接给买家看
   const config = new DocumentBuilder()
-    .setTitle('校园 AI 商城 API')
+    .setTitle('AI优选零食 API')
     .setDescription('零食 + 二手书，AI 助手为核心')
     .setVersion('0.1.0')
     .addBearerAuth()

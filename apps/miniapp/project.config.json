@@ -1,7 +1,7 @@
 {
-  "description": "校园 AI 商城小程序（零食 + 二手书）",
+  "description": "AI优选零食 小程序（校园零食 + 二手教材）",
   "appid": "touristappid",
-  "projectname": "campus-ai-mall",
+  "projectname": "AI优选零食",
   "compileType": "miniprogram",
   "libVersion": "3.5.0",
   "setting": {

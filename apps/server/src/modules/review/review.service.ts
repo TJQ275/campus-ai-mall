@@ -177,7 +177,7 @@ export class ReviewService {
     rows: { rating: number; content: string | null }[],
   ): Promise<SummaryPayload> {
     const prompt = [
-      '你在为校园商城生成商品评论摘要。只输出 JSON，不要解释。',
+      '你在为「AI优选零食」生成商品评论摘要。只输出 JSON，不要解释。',
       '商品：' + product.title + '（' + (product.kind === 'book' ? '二手书' : '零食') + '）',
       '评论：',
       ...rows.slice(0, 30).map((r) => r.rating + '分：' + (r.content ?? '（无文字）')),

@@ -55,7 +55,7 @@ export class CopywritingService {
     ].filter(Boolean).join('\n');
 
     const prompt = [
-      '你是校园商城的商品运营。根据下面这些**真实属性**写商品文案，不许编造不存在的卖点或夸大功效。',
+      '你是「AI优选零食」的商品运营。根据下面这些**真实属性**写商品文案，不许编造不存在的卖点或夸大功效。',
       facts,
       '风格要求：' + (STYLE_HINT[style] ?? STYLE_HINT.student),
       '只输出 JSON：{"title":"不超过 24 字","subtitle":"不超过 20 字","sellingPoints":["3 条，每条不超过 15 字"],"description":"不超过 120 字","tags":["最多 5 个"]}',

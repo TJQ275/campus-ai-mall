@@ -1,7 +1,7 @@
 <template>
   <div class="login-wrap">
     <el-card class="login-card">
-      <h2 style="margin-top: 0">校园 AI 商城 · 管理后台</h2>
+      <h2 style="margin-top: 0">AI优选零食 · 管理后台</h2>
       <p class="muted">演示账号：admin / admin123</p>
       <el-form :model="form" @submit.prevent="submit">
         <el-form-item>

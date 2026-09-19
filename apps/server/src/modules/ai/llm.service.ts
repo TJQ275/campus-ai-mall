@@ -72,7 +72,7 @@ export class LlmService {
             {
               role: 'user',
               content: [
-                { type: 'text', text: '这是校园商城里的一件商品（零食或二手教材）。用 JSON 回答：{"title":"品类名","keywords":["最多5个可用于检索的关键词，例如 辣条/薯片/高等数学/考研"]}。只输出 JSON。' },
+                { type: 'text', text: '这是「AI优选零食」商城里的一件商品（校园零食或二手教材）。用 JSON 回答：{"title":"品类名","keywords":["最多5个可用于检索的关键词，例如 辣条/薯片/高等数学/考研"]}。只输出 JSON。' },
                 { type: 'image_url', image_url: { url: absolute } },
               ],
             },

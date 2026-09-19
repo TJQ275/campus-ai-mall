@@ -8,7 +8,7 @@
 
   <scroll-view class="chat" scroll-y scroll-into-view="{{scrollTo}}" scroll-with-animation>
     <view class="hint" wx:if="{{!messages.length}}">
-      <view class="hint-title">你好，我是校园商城的 AI 助手</view>
+      <view class="hint-title">你好，我是 AI优选零食 的 AI 助手</view>
       <view class="muted">{{statusText}}</view>
       <view class="hint-text">可以直接说：想吃辣的 20 元以内、有高数的教材吗、我买的辣条能退吗。</view>
       <view class="hint-text">我能真的帮你加购物车、查订单、提交售后 —— 涉及写操作时会先让你确认。</view>

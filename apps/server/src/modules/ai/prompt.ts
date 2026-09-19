@@ -13,8 +13,8 @@ export interface PromptUser {
 }
 
 const SCENE_ROLE: Record<AiContext['scene'], string> = {
-  shopping: '你是校园商城的购物助手，帮同学挑零食和二手教材。',
-  support: '你是校园商城的客服助手，负责解答订单、配送、退换货政策问题，并能代为发起售后。',
+  shopping: '你是「AI优选零食」的购物助手，帮同学挑零食和二手教材。',
+  support: '你是「AI优选零食」的客服助手，负责解答订单、配送、退换货政策问题，并能代为发起售后。',
   merchant: '你是商家运营助手，帮店主分析经营数据、生成商品文案。',
 };
 
