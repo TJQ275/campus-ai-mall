@@ -45,6 +45,11 @@
     <button class="btn-primary btn-block login-btn" loading="{{loading}}" disabled="{{loading}}" bindtap="adminLogin">
       商家登录
     </button>
+    <view class="account-hint">
+      <view class="hint-row"><text class="hint-label">演示账号</text><text class="hint-value">admin</text></view>
+      <view class="hint-row"><text class="hint-label">演示密码</text><text class="hint-value">admin123</text></view>
+    </view>
     <view class="tip">登录后可查订单、发货、审核售后；<text class="strong">商品编辑</text>和<text class="strong">AI 配置</text>请在电脑浏览器打开管理后台</view>
+    <view class="tip">这是管理后台的同一个账号 —— <text class="strong">接手后请立刻改密码</text>，改法见 docs/08 卖家操作手册第四节</view>
   </view>
 </view>

@@ -9,9 +9,9 @@ Page({
     nickname: '',
     avatarUrl: '',
     avatarTempPath: '',
-    // 商家
-    username: '',
-    password: '',
+    // 商家：预填演示账号，和管理后台登录页保持一致；接手后第一件事就是改密码
+    username: 'admin',
+    password: 'admin123',
   },
 
   onLoad() {
