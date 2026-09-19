@@ -15,6 +15,7 @@
     "db:studio": "pnpm --filter @campus/server db:studio",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint"
+    "lint": "pnpm -r lint",
+    "ai:embed": "pnpm --filter @campus/server ai:embed"
   }
 }

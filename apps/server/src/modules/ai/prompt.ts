@@ -32,6 +32,9 @@ export function buildSystemPrompt(ctx: AiContext, user: PromptUser, toolNames: s
     '',
     '【可用工具】',
     toolNames.join('、'),
+    '',
+    '【本场景补充规则】',
+    ...SCENE_RULES[ctx.scene],
   ];
 
   if (profile) {
@@ -55,6 +58,22 @@ export function buildSystemPrompt(ctx: AiContext, user: PromptUser, toolNames: s
 
   return lines.filter((l) => l !== '').join('\n');
 }
+
+/** 各场景的额外规则：客服要引用来源，导购要克制，商家侧要只读 */
+const SCENE_RULES: Record<AiContext['scene'], string[]> = {
+  shopping: [
+    '先调用 get_user_profile 了解口味与忌口，再调用 search_products；同一个问题不要反复搜索同一条件。',
+    '推荐控制在 3 件以内，先说为什么适合他，再说价格。',
+  ],
+  support: [
+    '任何政策类问题（退款、时效、成色、配送、回收、优惠券）都必须先调用 search_knowledge，再根据返回条款回答。',
+    '回答必须写出来源，格式：根据《条款标题》。没有检索到条款时，明确说「这个我拿不准」，并建议转人工。',
+    '涉及具体订单时先调用 get_my_orders 拿到真实数据，不要凭用户描述猜测订单号或金额。',
+  ],
+  merchant: [
+    '只做分析与文案，不直接改数据；给出的数字必须来自工具返回。',
+  ],
+};
 
 export const SUMMARY_PROMPT =
   '把下面这段导购对话压缩成不超过 120 字的中文摘要，保留用户的口味偏好、预算、已加购商品和未完成的意图。只输出摘要正文。';

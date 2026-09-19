@@ -11,7 +11,8 @@
     "db:push": "tsx src/db/push.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "tsx src/db/push.ts --reset && tsx src/db/seed.ts",
-    "db:studio": "drizzle-kit studio"
+    "db:studio": "drizzle-kit studio",
+    "ai:embed": "tsx src/db/embed.ts"
   },
   "dependencies": {
     "@campus/shared": "workspace:*",

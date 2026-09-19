@@ -1,5 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import * as path from 'node:path';
 import { Logger, ValidationPipe } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { AppModule } from './app.module.js';
@@ -7,7 +9,9 @@ import { ResponseInterceptor } from './common/interceptors/response.interceptor.
 import { AllExceptionsFilter } from './common/filters/all-exceptions.filter.js';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { cors: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { cors: true });
+  // 上传的商品图 / 用户评价图：静态托管在 /uploads
+  app.useStaticAssets(path.resolve(process.cwd(), 'uploads'), { prefix: '/uploads/' });
   const prefix = process.env.API_PREFIX ?? '/api';
   app.setGlobalPrefix(prefix);
   app.useGlobalPipes(new ValidationPipe({ transform: true, whitelist: true }));

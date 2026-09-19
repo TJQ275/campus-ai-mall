@@ -1,6 +1,8 @@
 import { Injectable } from '@nestjs/common';
 import { CatalogTools } from './catalog.tools.js';
 import { TradeTools } from './trade.tools.js';
+import { KnowledgeTools } from './knowledge.tools.js';
+import { MediaTools } from './media.tools.js';
 import { zodToJsonSchema, type AiTool, type AiContext } from './tool.types.js';
 import type { ToolSpec } from '../provider/types.js';
 
@@ -9,8 +11,10 @@ import type { ToolSpec } from '../provider/types.js';
 export class ToolRegistry {
   private readonly tools = new Map<string, AiTool>();
 
-  constructor(catalogTools: CatalogTools, tradeTools: TradeTools) {
-    for (const tool of [...catalogTools.all(), ...tradeTools.all()]) this.register(tool);
+  constructor(catalogTools: CatalogTools, tradeTools: TradeTools, knowledgeTools: KnowledgeTools, mediaTools: MediaTools) {
+    for (const tool of [...catalogTools.all(), ...tradeTools.all(), ...knowledgeTools.all(), ...mediaTools.all()]) {
+      this.register(tool);
+    }
   }
 
   register(tool: AiTool) {

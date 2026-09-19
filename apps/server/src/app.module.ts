@@ -10,6 +10,8 @@ import { OrderModule } from './modules/order/order.module.js';
 import { AfterSaleModule } from './modules/after-sale/after-sale.module.js';
 import { WalletModule } from './modules/wallet/wallet.module.js';
 import { AiModule } from './modules/ai/ai.module.js';
+import { ReviewModule } from './modules/review/review.module.js';
+import { UploadModule } from './modules/upload/upload.module.js';
 import { HealthModule } from './modules/health/health.module.js';
 
 @Module({
@@ -29,6 +31,8 @@ import { HealthModule } from './modules/health/health.module.js';
     AfterSaleModule,
     WalletModule,
     AiModule,
+    ReviewModule,
+    UploadModule,
     HealthModule,
   ],
 })

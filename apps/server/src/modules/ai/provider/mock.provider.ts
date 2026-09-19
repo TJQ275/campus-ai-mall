@@ -52,6 +52,16 @@ export class MockProvider implements LlmProvider {
     const call = (name: string, args: Record<string, unknown>): LlmToolCall | null =>
       available.has(name) ? { id, name, arguments: args, rawArguments: JSON.stringify(args) } : null;
 
+    if (/(退款政策|怎么退|能退吗|政策|规则|多久到账|多久能到|时效|配送|运费|优惠券|回收|成色|流程)/.test(text)) {
+      return call('search_knowledge', { query: text });
+    }
+    const isbn = /(\d[\d\-\s]{9,17}[\dXx])/.exec(text)?.[1]?.replace(/[^0-9Xx]/g, '');
+    if (isbn && isbn.length >= 10) return call('search_by_isbn', { isbn });
+    if (/(拍照|照片|图片|拍了一张|拍下来|同款)/.test(text)) {
+      // 只有用户真的描述了画面内容才传 description，否则走 search_by_image 的降级分支
+      const described = /(?:图片|照片|拍)[^，。]{0,8}(?:是|有|为)([^，。！？]{2,20})/.exec(text)?.[1]?.trim();
+      return call('search_by_image', described ? { description: described } : {});
+    }
     if (/购物车/.test(text)) return call('get_cart', {});
     if (/(我的|查|看).{0,4}订单|订单(到哪|状态)|发货|物流/.test(text)) return call('get_my_orders', {});
     if (/(退款|退货|退掉|退了|退一下|售后|不想要了)/.test(text)) return call('get_my_orders', {});
@@ -184,6 +194,21 @@ export class MockProvider implements LlmProvider {
     }
     if (payload.status === 'pending_user_confirmation') {
       return '已经准备好了：' + String(payload.summary ?? '') + '。点下面的确认按钮就生效，不想加也没关系。';
+    }
+    if (toolName === 'search_knowledge') {
+      const chunks = (payload.chunks ?? []) as { title: string; source?: string; content: string }[];
+      if (!chunks.length) return '这个我拿不准，建议直接转人工客服帮你确认一下。';
+      return '根据《' + chunks[0].title + '》：' + chunks[0].content.slice(0, 90) + '。' + (chunks[1] ? '另外《' + chunks[1].title + '》也有相关规定。' : '');
+    }
+    if (toolName === 'search_by_isbn') {
+      const found = Number(payload.found ?? 0);
+      if (!found) return '平台暂时没有这本书（ISBN ' + String(payload.isbn ?? '') + '）。要不要我帮你登记一条求购？到货后通知你。';
+      return '扫到了 ' + found + ' 本在售的同款教材，价格和成色都列在下面的卡片里。';
+    }
+    if (toolName === 'search_by_image') {
+      if (payload.needsDescription) return '抱歉，我这边暂时没法直接看图。你用一句话说说图片里是什么（比如「红色包装的辣条」），或者如果是教材，扫书背面的 ISBN 会更快更准。';
+      const items = (payload.items ?? []) as { title: string }[];
+      return items.length ? '按图片找到 ' + items.length + ' 件相似商品，你看是不是这个？' : '没有找到同款，换个角度拍一张或者告诉我品牌名试试。';
     }
     if (toolName === 'add_to_cart') {
       return '好，已经加进购物车了：' + String(payload.title ?? '商品') + ' × ' + String(payload.quantity ?? 1) + '。还要再配点什么吗？';
