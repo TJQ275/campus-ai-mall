@@ -48,11 +48,12 @@
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column label="操作" width="250">
+      <el-table-column label="操作" width="310">
         <template #default="scope">
           <el-button link type="primary" @click="openEdit(scope.row)">编辑</el-button>
           <el-button link type="primary" @click="toggle(scope.row)">{{ scope.row.status === 'on' ? '下架' : '上架' }}</el-button>
           <el-button link type="success" @click="writeCopy(scope.row)">AI 写文案</el-button>
+          <el-button link type="danger" @click="remove(scope.row)">删除</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -228,7 +229,7 @@ import { computed, onMounted, reactive, ref } from 'vue';
 import type { UploadFile } from 'element-plus';
 import { BOOK_CONDITION_LABEL, PRODUCT_KIND_LABEL } from '@campus/shared';
 import { api, yuan } from '../api';
-import { runAction } from '../composables/async';
+import { confirmAction, runAction } from '../composables/async';
 import { useTable } from '../composables/useTable';
 
 const { rows, total, loading, query, load, search, onPage } = useTable<Record<string, any>, { keyword: string; kind: string; status: string; page: number; pageSize: number }>(
@@ -438,6 +439,23 @@ async function toggle(row: Record<string, any>) {
     ElMessage.success(row.status === 'on' ? '已下架' : '已上架');
     await load();
   }, '操作失败');
+}
+
+/**
+ * 删除商品。
+ * 已被下单过的商品后端会拒绝（会影响历史订单与经营统计），错误提示里会引导改用「下架」。
+ */
+async function remove(row: Record<string, any>) {
+  const ok = await confirmAction(
+    '确定删除「' + row.title + '」？已经被下单过的商品不能删除，届时会提示你改用「下架」。',
+    '删除商品',
+  );
+  if (!ok) return;
+  await runAction(async () => {
+    const result = await api.productRemove(row.id);
+    ElMessage.success('已删除「' + result.title + '」');
+    await load();
+  }, '删除失败');
 }
 
 // ── AI 文案 ──

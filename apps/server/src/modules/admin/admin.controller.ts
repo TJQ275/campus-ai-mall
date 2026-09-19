@@ -126,6 +126,12 @@ export class AdminShopController {
     return this.shop.productToggle(id, body.status === 'off' ? 'off' : 'on');
   }
 
+  @Delete('products/:id')
+  @ApiOperation({ summary: '删除商品（已产生订单的商品会被拒绝，请改用下架）' })
+  productRemove(@Param('id', ParseIntPipe) id: number) {
+    return this.shop.productRemove(id);
+  }
+
   @Get('categories')
   @ApiOperation({ summary: '分类列表' })
   categories() {

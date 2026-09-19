@@ -37,7 +37,7 @@
   <view class="card">
     <view class="cell" bindtap="goAi">
       <text>AI 购物助手</text>
-      <text class="muted">{{aiMock ? '本地演示模式' : '已接入大模型'}} ></text>
+      <text class="muted">></text>
     </view>
     <view class="cell" bindtap="goAfterSale"><text>售后记录</text><text class="muted">></text></view>
     <view class="cell" bindtap="goAddress"><text>收货地址</text><text class="muted">></text></view>

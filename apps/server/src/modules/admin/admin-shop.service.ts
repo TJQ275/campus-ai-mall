@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { and, asc, desc, eq, gte, ilike, or, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
-import { categories, products, users, walletLogs } from '../../db/schema/index.js';
+import { categories, orderItems, products, users, walletLogs } from '../../db/schema/index.js';
 import { CatalogService } from '../catalog/catalog.service.js';
 
 /** 管理端的商品 / 分类 / 用户维护 */
@@ -96,6 +96,34 @@ export class AdminShopService {
     }
     const created = await this.db.insert(products).values(patch as never).returning();
     return created[0];
+  }
+
+  /**
+   * 删除商品。
+   *
+   * 已经产生过订单的商品不允许硬删：订单、售后、经营统计都靠 product_id 关联，
+   * 删掉之后历史数据就对不上了。这种情况引导卖家改用「下架」——
+   * 下架后小程序立刻搜不到，但已下单的订单、售后记录都完好。
+   */
+  async productRemove(id: number) {
+    const product = (await this.db.select().from(products).where(eq(products.id, id)).limit(1))[0];
+    if (!product) throw new NotFoundException('商品不存在');
+
+    const counted = await this.db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(orderItems)
+      .where(eq(orderItems.productId, id));
+    const orderCount = counted[0]?.count ?? 0;
+    if (orderCount > 0) {
+      throw new BadRequestException(
+        '「' + product.title + '」已经产生了 ' + orderCount + ' 条订单记录，删除会让历史订单和经营统计对不上。' +
+          '请改用「下架」：下架后小程序立刻搜不到，已下单的订单不受影响。',
+      );
+    }
+
+    // 购物车、评价、SKU、图片、标签都配了级联删除，这里删主表即可
+    await this.db.delete(products).where(eq(products.id, id));
+    return { removed: true, id, title: product.title };
   }
 
   async productToggle(id: number, status: 'on' | 'off') {

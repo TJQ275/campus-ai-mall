@@ -56,7 +56,8 @@ Page({
   async loadStatus() {
     try {
       const status = await api.aiStatus();
-      this.setData({ statusText: status.mock ? '本地演示模式（未配置大模型 Key）' : '已接入 ' + status.model });
+      // 面向买家不暴露「演示模式 / 降级」这类内部状态，卖家在后台「AI 设置」里能直接看到当前模式
+      this.setData({ statusText: '' });
     } catch {
       this.setData({ statusText: '后端未连接' });
     }
@@ -216,7 +217,7 @@ Page({
     } else if (name === 'action_confirm') {
       patch[base + '.action'] = { id: payload.actionId, summary: payload.summary, status: 'pending' };
     } else if (name === 'usage') {
-      patch[base + '.meta'] = (payload.degraded ? '本地演示模式 · ' : '') + payload.model + ' · ' + payload.latencyMs + 'ms';
+      patch[base + '.meta'] = payload.model + ' · ' + payload.latencyMs + 'ms';
     } else if (name === 'error') {
       patch[base + '.text'] = (current.text || '') + ' [出错了] ' + payload.message;
     } else if (name === 'done') {

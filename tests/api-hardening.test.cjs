@@ -226,6 +226,18 @@ async function main() {
       check('下架商品', off.data && off.data.status === 'off', off.data && off.data.status);
       const hidden = await call('GET', '/products?keyword=' + encodeURIComponent(keyword));
       check('下架后前台搜不到', hidden.data && hidden.data.total === 0, '命中 ' + (hidden.data && hidden.data.total) + ' 条');
+
+      // 减少商品：没产生过订单的可以真删
+      const removed = await call('DELETE', '/admin/products/' + created.data.id, undefined, true);
+      check('删除未下单的商品', removed.code === 0 && removed.data && removed.data.removed === true,
+        '已删除「' + (removed.data && removed.data.title) + '」');
+
+      const gone = await call('GET', '/products?keyword=' + encodeURIComponent(keyword));
+      check('删除后彻底搜不到', gone.data && gone.data.total === 0, '命中 ' + (gone.data && gone.data.total) + ' 条');
+
+      // 已经下过单的商品不能硬删，否则历史订单与经营统计会对不上
+      const blocked = await call('DELETE', '/admin/products/' + product.id, undefined, true);
+      check('已下单商品拒绝删除', blocked.status === 400 && /下架/.test(blocked.message || ''), blocked.message);
     }
   } else {
     check('商品新增（跳过）', true, '没有 snack 分类');
@@ -257,17 +269,22 @@ async function main() {
   const reset = await call('POST', '/admin/settings/llm/reset', undefined, true);
   check('恢复默认后回到降级模式', reset.data && reset.data.runtime.mock === true, '模式 ' + (reset.data && reset.data.runtime.provider));
 
-  console.log('\n=== 10. 登录限流 ===');
+  console.log('\n=== 10. 登录限流（按 IP + 账号分桶）===');
   let limited = 0;
   for (let i = 0; i < 12; i += 1) {
     const res = await fetch(BASE + '/auth/admin/login', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ username: 'admin', password: 'wrong-password' }),
+      // 故意刷一个不存在的账号。限流按「IP + 账号」分桶，
+      // 所以刷它不会把真管理员一起锁在门外（这也是本节的断言之一）。
+      body: JSON.stringify({ username: 'attacker_probe', password: 'wrong-password' }),
     });
     if (res.status === 429) limited += 1;
   }
   check('连续错误登录被限流', limited > 0, '触发 ' + limited + ' 次 429');
+
+  const stillWorks = await call('POST', '/auth/admin/login', { username: 'admin', password: 'admin123' });
+  check('刷其他账号不会锁死管理员', stillWorks.code === 0 && Boolean(stillWorks.data && stillWorks.data.token), '管理员仍可正常登录');
 
   const summaryLine = results.filter((r) => r.ok).length + ' 项，失败 ' + results.filter((r) => !r.ok).length + ' 项';
   console.log('\n================================');

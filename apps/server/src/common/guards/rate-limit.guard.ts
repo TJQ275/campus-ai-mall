@@ -6,8 +6,16 @@ export interface RateLimitRule {
   limit: number;
   /** 窗口长度（毫秒） */
   windowMs: number;
-  /** 限流维度：按 IP 还是按登录用户 */
-  by?: 'ip' | 'user';
+  /**
+   * 限流维度：
+   *   ip       按来源 IP
+   *   user     按登录用户（需要放在 JwtAuthGuard 之后）
+   *   ip+body  按「IP + 请求体里的账号」——登录接口用这个：
+   *            有人拿字典刷某个账号时，不会把同一台机器上的其他账号一起锁死
+   */
+  by?: 'ip' | 'user' | 'ip+body';
+  /** by:'ip+body' 时从请求体取哪个字段作为账号，默认 username */
+  bodyKey?: string;
 }
 
 export const RATE_LIMIT_KEY = 'rate_limit';
@@ -48,13 +56,21 @@ export class RateLimitGuard implements CanActivate {
       ip?: string;
       socket?: { remoteAddress?: string };
       headers: Record<string, string | string[] | undefined>;
+      body?: Record<string, unknown>;
       user?: { sub?: number };
     }>();
 
-    const userKey = rule.by === 'user' ? request.user?.sub : undefined;
     const ip = request.ip ?? request.socket?.remoteAddress ?? 'unknown';
     // by:'user' 时如果拿不到用户（例如没登录），退化成按 IP 限流，而不是不限流
-    const key = (context.getClass().name ?? '') + ':' + (context.getHandler().name ?? '') + ':' + (userKey ?? ip);
+    let identity: string = ip;
+    if (rule.by === 'user' && request.user?.sub !== undefined) {
+      identity = 'u' + request.user.sub;
+    } else if (rule.by === 'ip+body') {
+      const field = rule.bodyKey ?? 'username';
+      const value = request.body?.[field];
+      identity = ip + '|' + (typeof value === 'string' && value ? value : '-');
+    }
+    const key = (context.getClass().name ?? '') + ':' + (context.getHandler().name ?? '') + ':' + identity;
 
     const now = Date.now();
     this.sweep(now);

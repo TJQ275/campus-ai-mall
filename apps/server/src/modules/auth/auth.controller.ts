@@ -12,10 +12,11 @@ import { CurrentUser, type AuthUser } from '../../common/decorators/current-user
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
 
-  // 登录接口限流：避免有人拿字典把管理员密码刷出来
+  // 登录接口限流：避免有人拿字典把管理员密码刷出来。
+  // 按「IP + 用户名」分桶 —— 否则攻击者刷一个不存在的账号，就能把真管理员一起锁在门外。
   @Post('admin/login')
   @UseGuards(RateLimitGuard)
-  @RateLimit({ limit: 10, windowMs: 60_000 })
+  @RateLimit({ limit: 10, windowMs: 60_000, by: 'ip+body', bodyKey: 'username' })
   @ApiOperation({ summary: '管理后台登录（演示账号 admin / admin123）' })
   adminLogin(
     @Body(new ZodValidationPipe(AdminLoginRequest)) body: AdminLoginRequest,
