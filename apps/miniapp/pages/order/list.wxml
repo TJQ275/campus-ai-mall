@@ -4,13 +4,15 @@
           data-key="{{item.key}}" bindtap="switchTab">{{item.label}}</view>
   </view>
 
-  <view class="card" wx:for="{{orders}}" wx:key="id">
+  <view class="card" wx:for="{{orders}}" wx:key="id" wx:for-index="oi">
     <view class="between" bindtap="goDetail" data-id="{{item.id}}">
       <text class="muted">{{item.orderNo}}</text>
       <text class="status">{{item.statusText}}</text>
     </view>
-    <view class="product-card" wx:for="{{item.items}}" wx:for-item="goods" wx:key="id">
-      <image class="product-cover" src="{{goods.coverSnapshot}}" mode="aspectFill" />
+    <view class="product-card" wx:for="{{item.items}}" wx:for-item="goods" wx:for-index="gi" wx:key="id">
+      <image wx:if="{{!goods.coverFailed}}" class="product-cover" src="{{goods.coverSnapshot}}" mode="aspectFill" lazy-load
+             data-path="orders[{{oi}}].items[{{gi}}].coverFailed" binderror="onImageError" />
+      <view wx:else class="product-cover cover-fallback">暂无图</view>
       <view class="product-info">
         <view class="product-title">{{goods.titleSnapshot}}</view>
         <view class="between">
@@ -32,5 +34,7 @@
     </view>
   </view>
 
-  <view class="empty" wx:if="{{!orders.length}}">还没有相关订单</view>
+  <view class="empty" wx:if="{{!orders.length && !loading}}">{{errorText || '还没有相关订单'}}</view>
+  <view class="list-end" wx:if="{{loading && orders.length}}">加载中…</view>
+  <view class="list-end" wx:if="{{orders.length && orders.length >= total}}">没有更多了</view>
 </view>

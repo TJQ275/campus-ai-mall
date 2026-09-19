@@ -1,7 +1,7 @@
 import './env.js';
-import { randomBytes, scryptSync } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { createDb, ensureVectorExtension, type Db } from './client.js';
+import { hashPassword } from '../common/password.js';
 import * as t from './schema/index.js';
 
 /**
@@ -11,12 +11,6 @@ import * as t from './schema/index.js';
  * 另外写入售后政策知识库、演示订单、演示评论，以及一段带工具调用的 AI 会话，
  * 让管理后台的「AI 调用日志」一打开就有数据可看。
  */
-function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString('hex');
-  const hash = scryptSync(password, salt, 64).toString('hex');
-  return 'scrypt$' + salt + '$' + hash;
-}
-
 const IMG = (seed: string) => 'https://picsum.photos/seed/' + seed + '/600/600';
 
 async function main() {
@@ -37,7 +31,8 @@ async function main() {
   `);
 
   // ── 用户 ──
-  const [admin, zhang, li, wang] = await db.insert(t.users).values([
+  // 第一个是管理员账号：插入后不再被引用，用下划线前缀表明是有意不用
+  const [_admin, zhang, li, wang] = await db.insert(t.users).values([
     { username: 'admin', passwordHash: hashPassword('admin123'), nickname: '校园小卖部管理员', role: 'admin', avatar: IMG('admin') },
     { openid: 'demo-openid-1', nickname: '张小明', role: 'user', balanceCents: 5000, avatar: IMG('stu1') },
     { openid: 'demo-openid-2', nickname: '李思思', role: 'user', balanceCents: 8000, avatar: IMG('stu2') },
@@ -104,7 +99,6 @@ async function main() {
     { name: '有笔记', kind: 'other', weight: 8 },
     { name: '教材', kind: 'course', weight: 10 },
   ]).returning();
-  const tag = (name: string) => tagRows.find((r) => r.name === name)!.id;
 
   // ── 商品：零食 ──
   const snackSeed: Array<[string, string, string, number, number, number, number, number, string[]]> = [
@@ -323,7 +317,7 @@ async function main() {
     rollingSummary: '用户想买辣味零食，预算 20 元以内，最终加购了 2 包卫龙大面筋和 1 瓶冰红茶。',
   }).returning();
 
-  const [userMsg, assistantMsg] = await db.insert(t.aiMessages).values([
+  const [, assistantMsg] = await db.insert(t.aiMessages).values([
     { conversationId: conv.id, userId: zhang.id, role: 'user', content: '想吃辣的，20 元以内，最好能凑个夜宵组合', model: null },
     { conversationId: conv.id, userId: zhang.id, role: 'assistant', content: '给你配了一套夜宵组合：卫龙大面筋 106g（辣度 4）2 包 + 康师傅冰红茶 500ml 1 瓶，合计 12.00 元，还不到 20 元预算。要不要直接加购？', cards: [{ type: 'product', productId: snackRows[0].id, title: snackRows[0].title, priceCents: 350 }], model: 'deepseek-chat', promptTokens: 860, completionTokens: 96, latencyMs: 1420 },
   ]).returning();

@@ -1,9 +1,9 @@
 import { Inject, Injectable } from '@nestjs/common';
 import { z } from 'zod';
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { DB } from '../../database/database.module.js';
 import type { Db } from '../../../db/client.js';
-import { afterSales, orderItems, orders, products, users } from '../../../db/schema/index.js';
+import { products } from '../../../db/schema/index.js';
 import { CopywritingService } from '../copywriting.service.js';
 import type { AiTool, ToolResult } from './tool.types.js';
 

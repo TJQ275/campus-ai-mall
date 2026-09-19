@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "prepare": "pnpm --filter @campus/shared build",
     "dev:server": "pnpm --filter @campus/server dev",
     "db:generate": "pnpm --filter @campus/server db:generate",
     "db:push": "pnpm --filter @campus/server db:push",
@@ -15,7 +16,7 @@
     "db:studio": "pnpm --filter @campus/server db:studio",
     "build": "pnpm -r build",
     "typecheck": "pnpm -r typecheck",
-    "lint": "pnpm -r lint",
+    "lint": "eslint .",
     "ai:embed": "pnpm --filter @campus/server ai:embed",
     "dev:admin": "pnpm --filter @campus/admin dev",
     "build:admin": "pnpm --filter @campus/admin build",
@@ -23,9 +24,19 @@
     "dev:miniapp": "echo 用微信开发者工具打开 apps/miniapp 目录",
     "db:reset": "pnpm --filter @campus/server db:reset",
     "test:acceptance": "node tests/acceptance.test.cjs",
-    "test": "pnpm test:acceptance && pnpm test:miniapp",
+    "test:hardening": "node tests/api-hardening.test.cjs",
+    "test:unit": "pnpm --filter @campus/server test:unit",
+    "test": "pnpm test:unit && pnpm test:acceptance && pnpm test:hardening && pnpm test:miniapp",
     "demo:prepare": "pnpm --filter @campus/server demo:prepare",
     "setup": "pnpm db:push && pnpm db:seed && pnpm demo:prepare",
     "dev": "pwsh -File scripts/dev.ps1"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^9.39.5",
+    "eslint-plugin-vue": "^10.11.0",
+    "globals": "^17.12.0",
+    "typescript-eslint": "^8.70.0",
+    "vue-eslint-parser": "^10.4.1"
   }
 }

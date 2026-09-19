@@ -4,18 +4,18 @@
     <p class="muted">客服助手回答政策问题的检索源。新增或修改后立刻生效：配置了 embedding 模型会同步补向量，否则走关键词检索。</p>
 
     <div class="toolbar">
-      <el-input v-model="query.keyword" placeholder="搜索标题或内容" style="width: 240px" clearable @keyup.enter="load" />
-      <el-select v-model="query.scene" placeholder="全部场景" clearable style="width: 160px">
+      <el-input v-model="query.keyword" placeholder="搜索标题或内容" style="width: 240px" clearable @keyup.enter="search" />
+      <el-select v-model="query.scene" placeholder="全部场景" clearable style="width: 160px" @change="search">
         <el-option label="客服 support" value="support" />
         <el-option label="导购 shopping" value="shopping" />
         <el-option label="商家 merchant" value="merchant" />
       </el-select>
-      <el-button type="primary" @click="load">查询</el-button>
+      <el-button type="primary" @click="search">查询</el-button>
       <el-button @click="openCreate">新增条款</el-button>
       <el-button @click="reindex">重建向量索引</el-button>
     </div>
 
-    <el-table :data="rows" size="small">
+    <el-table :data="rows" size="small" v-loading="loading">
       <el-table-column prop="id" label="ID" width="70" />
       <el-table-column prop="title" label="标题" width="180" />
       <el-table-column prop="scene" label="场景" width="110" />
@@ -28,6 +28,15 @@
         </template>
       </el-table-column>
     </el-table>
+
+    <el-pagination
+      style="margin-top: 16px"
+      layout="prev, pager, next, total"
+      :total="total"
+      :page-size="query.pageSize"
+      :current-page="query.page"
+      @current-change="onPage"
+    />
 
     <el-dialog v-model="dialog" :title="form.id ? '编辑条款' : '新增条款'" width="620px">
       <el-form :model="form" label-width="80px">
@@ -54,18 +63,16 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue';
-import { ElMessage, ElMessageBox } from 'element-plus';
 import { api } from '../api';
+import { confirmAction, runAction } from '../composables/async';
+import { useTable } from '../composables/useTable';
 
-const rows = ref<Record<string, any>[]>([]);
 const dialog = ref(false);
-const query = reactive({ keyword: '', scene: '', page: 1, pageSize: 50 });
 const form = reactive({ id: 0, title: '', scene: 'support', source: '', content: '' });
-
-async function load() {
-  const data = await api.knowledgeList({ ...query });
-  rows.value = data.list;
-}
+const { rows, total, loading, query, load, search, onPage } = useTable(
+  (q, signal) => api.knowledgeList(q, signal),
+  { keyword: '', scene: '', page: 1, pageSize: 20 },
+);
 
 function openCreate() {
   Object.assign(form, { id: 0, title: '', scene: 'support', source: '', content: '' });
@@ -78,23 +85,31 @@ function openEdit(row: Record<string, any>) {
 }
 
 async function save() {
-  if (form.id) await api.knowledgeUpdate(form.id, { ...form });
-  else await api.knowledgeCreate({ title: form.title, scene: form.scene, source: form.source, content: form.content });
-  ElMessage.success('已保存');
-  dialog.value = false;
-  await load();
+  await runAction(async () => {
+    if (form.id) await api.knowledgeUpdate(form.id, { ...form });
+    else await api.knowledgeCreate({ title: form.title, scene: form.scene, source: form.source, content: form.content });
+    ElMessage.success('已保存');
+    dialog.value = false;
+    await load();
+  }, '保存失败');
 }
 
 async function remove(row: Record<string, any>) {
-  await ElMessageBox.confirm('确定删除「' + row.title + '」？', '提示', { type: 'warning' });
-  await api.knowledgeRemove(row.id);
-  ElMessage.success('已删除');
-  await load();
+  if (!(await confirmAction('确定删除「' + row.title + '」？'))) return;
+  await runAction(async () => {
+    await api.knowledgeRemove(row.id);
+    ElMessage.success('已删除');
+    // 删掉当前页最后一条时往前退一页，避免停在空页
+    if (rows.value.length === 1 && query.page > 1) query.page -= 1;
+    await load();
+  }, '删除失败');
 }
 
 async function reindex() {
-  const result = await api.reindex();
-  ElMessage.success('重建完成：' + JSON.stringify(result));
+  await runAction(async () => {
+    const result = await api.reindex();
+    ElMessage.success('重建完成：' + JSON.stringify(result));
+  }, '重建索引失败');
 }
 
 onMounted(load);

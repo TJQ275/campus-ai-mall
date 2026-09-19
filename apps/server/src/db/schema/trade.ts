@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgTable, serial, smallint, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, serial, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { createdAt, money, updatedAt } from './_shared.js';
 import { products, productSkus } from './catalog.js';
 import { users } from './user.js';

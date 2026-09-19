@@ -10,3 +10,5 @@
 }
 .act.primary { border-color: #07c160; color: #07c160; }
 .link { color: #07c160; font-size: 24rpx; margin-top: 8rpx; }
+/* 列表尾部的「加载中 / 没有更多了」，比 .empty 轻一些 */
+.list-end { text-align: center; color: #969799; font-size: 24rpx; padding: 24rpx 0; }

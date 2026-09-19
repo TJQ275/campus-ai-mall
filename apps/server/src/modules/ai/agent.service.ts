@@ -1,9 +1,10 @@
-import { Inject, Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import type { AiChatInput, AiEvent } from '@campus/shared';
 import { AiService } from './ai.service.js';
 import { LlmService } from './llm.service.js';
 import { ToolRegistry } from './tools/tool.registry.js';
 import { buildSystemPrompt } from './prompt.js';
+import { buildHistoryMessages } from './history.js';
 import type { AiContext } from './tools/tool.types.js';
 import type { ChatMessage, ChatResult, LlmProvider, LlmToolCall, ToolSpec } from './provider/types.js';
 import type { ProductCard } from '../catalog/catalog.service.js';
@@ -58,13 +59,12 @@ export class AgentService {
     const history = await this.ai.history(conversation.id, 16);
     const messages: ChatMessage[] = [
       { role: 'system', content: system },
-      ...this.buildHistoryMessages(history),
+      ...buildHistoryMessages(history),
     ];
 
     const cards: ProductCard[] = [];
     let degraded = this.llm.current.isMock;
     let finalMessageId: number | null = null;
-    let lastUsage = { promptTokens: 0, completionTokens: 0, model: this.llm.current.model };
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
       // 客户端已经断开：立刻停止，不再发起新的模型调用
@@ -110,7 +110,6 @@ export class AgentService {
 
       if (!result) break;
       degraded = degraded || result.degraded;
-      lastUsage = { promptTokens: result.usage.promptTokens, completionTokens: result.usage.completionTokens, model: result.model };
 
       // 没有工具调用 → 这就是最终回复
       if (!result.toolCalls.length) {
@@ -362,109 +361,5 @@ export class AgentService {
       if (chunk.type === 'text') yield { type: 'delta', text: chunk.delta };
       else yield { type: 'done', result: chunk.result };
     }
-  }
-
-  private toChatMessage(row: {
-    role: string;
-    contentType: string;
-    content: string | null;
-    cards?: unknown[] | null;
-    toolName: string | null;
-  }): ChatMessage {
-    const content = row.content ?? '';
-    if (row.role === 'assistant') {
-      const cards = (row.cards ?? []) as { id?: number; title?: string }[];
-      const marker = cards.length
-        ? '\n[已展示商品: ' + cards.map((c) => String(c.id) + ':' + String(c.title)).join(' | ') + ']'
-        : '';
-      return { role: 'assistant', content: content + marker };
-    }
-    if (row.role === 'tool') {
-      // 兜底：孤立的工具结果（没有配对的 tool_calls 行）标成一条系统说明，不要伪装成助手发言
-      return { role: 'user', content: '（历史工具 ' + (row.toolName ?? '') + ' 的结果：' + content.slice(0, 500) + '）' };
-    }
-    return { role: row.role as ChatMessage['role'], content };
-  }
-
-  /**
-   * 把落库的消息还原成模型能理解的对话结构。
-   *
-   * 早期实现把历史里的 tool 结果改写成「assistant 自己说的一段话」，模型会以为
-   * 那些商品数据是自己讲过的（没有工具来源），既违反系统提示里「数字只能来自工具」
-   * 的硬规则，也是幻觉的来源。这里保留真实的 assistant(tool_calls) + tool 配对。
-   * 工具结果仍然截断到 1500 字，避免 prompt 被历史数据撑爆。
-   */
-  private buildHistoryMessages(
-    rows: {
-      id: number;
-      role: string;
-      contentType: string;
-      content: string | null;
-      cards?: unknown[] | null;
-      toolName: string | null;
-      toolCallId?: string | null;
-    }[],
-  ): ChatMessage[] {
-    const messages: ChatMessage[] = [];
-    let i = 0;
-
-    while (i < rows.length) {
-      const row = rows[i];
-
-      if (row.role === 'assistant' && row.contentType === 'tool_calls') {
-        let calls: { id?: string; name: string; arguments?: unknown }[] = [];
-        try {
-          const parsed = JSON.parse(row.content ?? '[]') as unknown;
-          calls = Array.isArray(parsed) ? (parsed as { name: string }[]) : [];
-        } catch {
-          calls = [];
-        }
-        if (!calls.length) {
-          i += 1;
-          continue;
-        }
-
-        // 紧随其后的 tool 结果行就是这一轮的返回（工具是串行执行的，顺序可靠）
-        const results: typeof rows = [];
-        let j = i + 1;
-        while (j < rows.length && rows[j].role === 'tool') {
-          results.push(rows[j]);
-          j += 1;
-        }
-
-        const ids = calls.map((call, index) => {
-          const paired = results.find((r) => r.toolCallId && call.id && r.toolCallId === call.id) ?? results[index];
-          return paired?.toolCallId || call.id || 'call_hist_' + row.id + '_' + index;
-        });
-
-        messages.push({
-          role: 'assistant',
-          content: '',
-          tool_calls: calls.map((call, index) => ({
-            id: ids[index],
-            name: call.name,
-            arguments: (call.arguments ?? {}) as Record<string, unknown>,
-            rawArguments: JSON.stringify(call.arguments ?? {}),
-          })),
-        });
-
-        results.forEach((result, index) => {
-          messages.push({
-            role: 'tool',
-            tool_call_id: ids[index],
-            name: result.toolName ?? calls[index]?.name ?? 'tool',
-            content: (result.content ?? '').slice(0, 1500),
-          });
-        });
-
-        i = j;
-        continue;
-      }
-
-      messages.push(this.toChatMessage(row));
-      i += 1;
-    }
-
-    return messages;
   }
 }

@@ -1,6 +1,8 @@
 <view>
   <view class="card profile">
-    <image class="avatar" src="{{user.avatar}}" mode="aspectFill" />
+    <image wx:if="{{user && !user.avatarFailed}}" class="avatar" src="{{user.avatar}}" mode="aspectFill"
+           data-path="user.avatarFailed" binderror="onImageError" />
+    <view wx:else class="avatar cover-fallback">同学</view>
     <view class="flex-1 ml-20">
       <view class="nick">{{user.nickname || '同学'}}</view>
       <view class="muted">{{user.profile.major || '还没填写专业'}} {{user.profile.grade}}</view>

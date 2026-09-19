@@ -71,7 +71,7 @@ for (const wxml of wxmlFiles) {
   for (const open of stack) problems.push(rel + ':' + open.line + '：<' + open.tag + '> 没有闭合');
 
   // 3) wx:for 缺 wx:key
-  for (const m of source.matchAll(/<([a-zA-Z][a-zA-Z0-9-]*)((?:\"[^\"]*\"|'[^']*'|[^>\"'])*?)\/?>/g)) {
+  for (const m of source.matchAll(/<([a-zA-Z][a-zA-Z0-9-]*)(?:"[^"]*"|'[^']*'|[^>"'])*?\/?>/g)) {
     const tagText = m[0];
     if (/wx:for\s*=/.test(tagText) && !/wx:key\s*=/.test(tagText)) {
       warnings.push(rel + ':' + lineOf(m.index) + '：wx:for 未配 wx:key');
@@ -79,11 +79,11 @@ for (const wxml of wxmlFiles) {
   }
 
   // 4) 跳转路径是否注册
-  for (const m of js.matchAll(/url:\s*'(\/pages\/[a-zA-Z0-9_\/-]+)/g)) {
+  for (const m of js.matchAll(/url:\s*'(\/pages\/[a-zA-Z0-9_/-]+)/g)) {
     const target = m[1].replace(/^\//, '');
     if (!pages.has(target)) problems.push(rel.replace(/\.wxml$/, '.js') + '：跳转到未注册的页面 ' + m[1]);
   }
-  for (const m of js.matchAll(/switchTab\(\{\s*url:\s*'(\/pages\/[a-zA-Z0-9_\/-]+)/g)) {
+  for (const m of js.matchAll(/switchTab\(\{\s*url:\s*'(\/pages\/[a-zA-Z0-9_/-]+)/g)) {
     const target = m[1].replace(/^\//, '');
     if (!tabPages.has(target)) problems.push(rel.replace(/\.wxml$/, '.js') + '：switchTab 目标不是 tabBar 页面 ' + m[1]);
   }

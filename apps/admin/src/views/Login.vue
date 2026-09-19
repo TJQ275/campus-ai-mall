@@ -17,22 +17,37 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from 'vue';
-import { useRouter } from 'vue-router';
-import { ElMessage } from 'element-plus';
+import { computed, reactive, ref } from 'vue';
+import { useRoute, useRouter } from 'vue-router';
 import { useAuthStore } from '../stores/auth';
+import { reportError } from '../composables/async';
 
+const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
 const loading = ref(false);
-const form = reactive({ username: 'admin', password: 'admin123' });
+// 演示提示留在页面上，但不预填真实密码
+const form = reactive({ username: '', password: '' });
+
+/** 登录后回被拦下的地址；只接受站内路径，防止 ?redirect= 把人带去站外 */
+const redirect = computed(() => {
+  const target = route.query.redirect;
+  const value = typeof target === 'string' ? target : '';
+  return value.startsWith('/') && !value.startsWith('//') ? value : '/dashboard';
+});
 
 async function submit() {
+  if (!form.username || !form.password) {
+    ElMessage.warning('请输入账号和密码');
+    return;
+  }
   loading.value = true;
   try {
     await auth.login(form.username, form.password);
     ElMessage.success('登录成功');
-    router.push('/dashboard');
+    await router.replace(redirect.value);
+  } catch (error) {
+    reportError(error, '登录失败');
   } finally {
     loading.value = false;
   }

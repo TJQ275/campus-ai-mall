@@ -1,14 +1,17 @@
 <view wx:if="{{product}}">
   <swiper class="gallery" indicator-dots circular>
-    <swiper-item wx:for="{{product.images}}" wx:key="*this">
-      <image src="{{item}}" mode="aspectFill" class="gallery-img" />
+    <swiper-item wx:for="{{product.images}}" wx:key="url">
+      <!-- 详情主图是首屏内容，不加 lazy-load -->
+      <image wx:if="{{!item.imageFailed}}" src="{{item.url}}" mode="aspectFill" class="gallery-img"
+             data-path="product.images[{{index}}].imageFailed" binderror="onImageError" />
+      <view wx:else class="gallery-img cover-fallback">暂无图片</view>
     </swiper-item>
   </swiper>
 
   <view class="card">
     <view class="price-row">
       <text class="price big">{{priceText}}</text>
-      <text class="muted strike" wx:if="{{product.originalPriceCents > product.priceCents}}">原价 ¥{{product.originalPriceCents / 100}}</text>
+      <text class="muted strike" wx:if="{{product.originalPriceCents > product.priceCents}}">原价 {{originalPriceText}}</text>
     </view>
     <view class="title">{{product.title}}</view>
     <view class="muted">{{product.subtitle}}</view>
@@ -33,7 +36,7 @@
   <view class="card" wx:if="{{skus.length}}">
     <view class="muted">规格 / 副本</view>
     <picker mode="selector" range="{{skus}}" range-key="name" value="{{skuIndex}}" bindchange="pickSku">
-      <view class="sku-picker">{{skus[skuIndex].name}} · ¥{{skus[skuIndex].priceCents / 100}}</view>
+      <view class="sku-picker">{{skus[skuIndex].name}} · {{skuPriceText}}</view>
     </picker>
   </view>
 

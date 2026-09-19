@@ -38,7 +38,7 @@ export class ReviewService {
   async create(userId: number, input: CreateReviewInput) {
     if (input.rating < 1 || input.rating > 5) throw new BadRequestException('评分必须在 1-5 之间');
 
-    let orderItemId = input.orderItemId ?? null;
+    const orderItemId = input.orderItemId ?? null;
     if (orderItemId) {
       const rows = await this.db
         .select({ id: orderItems.id })
@@ -115,8 +115,8 @@ export class ReviewService {
     for (const row of rows) ratingDist[String(row.rating)] = (ratingDist[String(row.rating)] ?? 0) + 1;
 
     const payload = this.llm.current.isMock
-      ? this.templateSummary(product, rows, ratingDist)
-      : await this.llmSummary(product, rows).catch(() => this.templateSummary(product, rows, ratingDist));
+      ? this.templateSummary(product, rows)
+      : await this.llmSummary(product, rows).catch(() => this.templateSummary(product, rows));
 
     const existing = await this.getSummary(productId);
     const values = {
@@ -141,7 +141,6 @@ export class ReviewService {
   private templateSummary(
     product: typeof products.$inferSelect,
     rows: { rating: number; content: string | null }[],
-    ratingDist: Record<string, number>,
   ): SummaryPayload {
     const avg = rows.reduce((sum, r) => sum + r.rating, 0) / rows.length;
     const split = (text: string | null) =>

@@ -21,6 +21,15 @@ export interface PageResult<T> {
   pageSize: number;
 }
 
+/**
+ * 查询串里重复出现的参数会变成数组，但只出现一次时是字符串。
+ * 这里统一成数组，让 ?tags=辣 和 ?tags=辣&tags=甜 都能用。
+ */
+const stringArray = z.preprocess(
+  (value) => (value === undefined || value === null || value === '' ? undefined : Array.isArray(value) ? value : [value]),
+  z.array(z.string()).optional(),
+);
+
 /** 商品检索（AI 工具与前台共用同一套参数） */
 export const ProductSearchQuery = z.object({
   keyword: z.string().trim().max(60).optional(),
@@ -29,7 +38,7 @@ export const ProductSearchQuery = z.object({
   /** 价格单位：元（库内统一存分，服务层负责换算） */
   priceMin: z.coerce.number().min(0).optional(),
   priceMax: z.coerce.number().min(0).optional(),
-  tags: z.array(z.string()).optional(),
+  tags: stringArray,
   /** 二手书专用：成色 / 课程 / ISBN */
   condition: z.enum(['new', 'like_new', 'good', 'fair']).optional(),
   course: z.string().trim().max(60).optional(),

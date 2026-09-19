@@ -1,14 +1,16 @@
 <view>
-  <view class="card" wx:for="{{list}}" wx:key="id">
+  <view class="card" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="pick">
     <view class="between">
       <text>{{item.receiver}} {{item.phone}}</text>
       <text class="tag" wx:if="{{item.isDefault}}">默认</text>
     </view>
     <view class="muted">{{item.campus}} {{item.detail}}</view>
-    <view class="actions">
-      <text class="link" data-id="{{item.id}}" bindtap="edit">编辑</text>
-      <text class="link" wx:if="{{!item.isDefault}}" data-id="{{item.id}}" bindtap="setDefault">设为默认</text>
-      <text class="link danger" data-id="{{item.id}}" bindtap="remove">删除</text>
+    <!-- 挑选模式下整行就是「选中」，编辑/删除等操作收起来，避免误触 -->
+    <view class="link" wx:if="{{pickMode}}">选择这个地址</view>
+    <view class="actions" wx:else>
+      <text class="link" data-id="{{item.id}}" catchtap="edit">编辑</text>
+      <text class="link" wx:if="{{!item.isDefault}}" data-id="{{item.id}}" catchtap="setDefault">设为默认</text>
+      <text class="link danger" data-id="{{item.id}}" catchtap="remove">删除</text>
     </view>
   </view>
   <view class="empty" wx:if="{{!list.length}}">还没有收货地址</view>

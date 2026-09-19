@@ -306,17 +306,26 @@ export class OrderService {
         (select count(*)::int from after_sale where status = 'pending') as pending_after_sale,
         (select count(*)::int from \"order\" where source = 'ai') as ai_order_count
     `).then((r) => (r as unknown as { rows: Record<string, number>[] }).rows);
+
+    // 14 天用 generate_series 补齐：直接 group by 只会返回「有订单的那几天」，
+    // 只有一天数据时整个图会变成一根糊满全宽的柱子，既看不出趋势也压住坐标轴。
+    // 成交额只统计已支付的订单，与上面的 KPI 口径保持一致。
     const trend = await this.db.execute(sql`
-      select to_char(created_at, 'MM-DD') as day, count(*)::int as orders, coalesce(sum(pay_cents), 0)::int as amount
-      from \"order\" where created_at > now() - interval '14 days'
-      group by 1 order by 1
+      select
+        to_char(d.day, 'MM-DD') as day,
+        count(o.id)::int as orders,
+        coalesce(sum(o.pay_cents) filter (where o.pay_status = 'paid'), 0)::int as amount
+      from generate_series(current_date - interval '13 days', current_date, interval '1 day') as d(day)
+      left join \"order\" o on o.created_at::date = d.day::date
+      group by d.day
+      order by d.day
     `).then((r) => (r as unknown as { rows: unknown[] }).rows);
     const categorySales = await this.db.execute(sql`
       select c.name, coalesce(sum(oi.quantity), 0)::int as qty
       from category c
       left join product p on p.category_id = c.id
       left join order_item oi on oi.product_id = p.id
-      group by c.name order by qty desc limit 10
+      group by c.name order by qty desc, c.name limit 10
     `).then((r) => (r as unknown as { rows: unknown[] }).rows);
     const payChannels = await this.db.execute(sql`
       select coalesce(pay_channel, 'unpaid') as channel, count(*)::int as count

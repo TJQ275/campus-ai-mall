@@ -23,7 +23,9 @@
 
   <view class="card">
     <view class="product-card" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="goProduct">
-      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" />
+      <image wx:if="{{!item.coverFailed}}" class="product-cover" src="{{item.cover}}" mode="aspectFill" lazy-load
+             data-path="list[{{index}}].coverFailed" binderror="onImageError" />
+      <view wx:else class="product-cover cover-fallback">暂无图</view>
       <view class="product-info">
         <view class="product-title">{{item.title}}</view>
         <view class="muted">{{item.subtitle}}</view>
@@ -33,7 +35,7 @@
         </view>
       </view>
     </view>
-    <view class="empty" wx:if="{{!loading && list.length === 0}}">没有找到商品</view>
+    <view class="empty" wx:if="{{!loading && list.length === 0}}">{{errorText || '没有找到商品'}}</view>
     <view class="empty" wx:if="{{loading}}">加载中…</view>
   </view>
 </view>

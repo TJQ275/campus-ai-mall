@@ -83,7 +83,11 @@ async function main() {
   const paid = await api.payOrder(order.id, 'balance');
   check('余额支付', paid.status === 'paid', '状态 ' + paid.status);
   const orders = await api.orders('all');
-  check('订单列表', orders.length > 0, '共 ' + orders.length + ' 笔');
+  check('订单列表（分页）', (orders.list || []).length > 0 && orders.total > 0 && orders.pageSize > 0,
+    '本页 ' + orders.list.length + ' 笔 / 共 ' + orders.total + ' 笔（每页 ' + orders.pageSize + '）');
+  const summary = await api.orderSummary();
+  check('订单角标统计', summary.all === orders.total && typeof summary.pending_pay === 'number',
+    '全部 ' + summary.all + ' / 待付款 ' + summary.pending_pay + ' / 待发货 ' + summary.paid);
   const orderDetail = await api.orderDetail(order.id);
   check('订单详情', (orderDetail.items || []).length > 0, orderDetail.items.length + ' 个商品，状态 ' + orderDetail.status);
 

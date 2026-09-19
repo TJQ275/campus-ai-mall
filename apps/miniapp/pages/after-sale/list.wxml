@@ -15,5 +15,5 @@
       <text class="link" wx:if="{{item.status === 'pending'}}" data-id="{{item.id}}" bindtap="cancel">撤销售后</text>
     </view>
   </view>
-  <view class="empty" wx:if="{{!list.length}}">还没有售后记录</view>
+  <view class="empty" wx:if="{{!list.length}}">{{errorText || '还没有售后记录'}}</view>
 </view>

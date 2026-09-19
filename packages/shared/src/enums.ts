@@ -58,6 +58,13 @@ export const PayChannel = {
   BALANCE: 'balance',
 } as const;
 export type PayChannel = (typeof PayChannel)[keyof typeof PayChannel];
+/** 统计口径里的「未支付」占位，不属于 PayChannel */
+export const PAY_CHANNEL_LABEL: Record<PayChannel | 'unpaid', string> = {
+  wechat: '微信',
+  alipay: '支付宝',
+  balance: '余额',
+  unpaid: '未支付',
+};
 
 /** 售后类型与状态 */
 export const AfterSaleType = { REFUND: 'refund', RETURN: 'return' } as const;
@@ -70,6 +77,13 @@ export const AfterSaleStatus = {
   REFUNDED: 'refunded',
 } as const;
 export type AfterSaleStatus = (typeof AfterSaleStatus)[keyof typeof AfterSaleStatus];
+export const AFTER_SALE_STATUS_LABEL: Record<AfterSaleStatus, string> = {
+  pending: '待审核',
+  approved: '已同意',
+  rejected: '已拒绝',
+  cancelled: '已撤销',
+  refunded: '已退款',
+};
 
 /** AI 会话场景 */
 export const AiScene = {

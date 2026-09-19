@@ -1,4 +1,5 @@
 const api = require('../../utils/api');
+const { showError } = require('../../utils/ui');
 
 const REASONS = ['不想要了', '商品破损', '与描述不符', '买重复了', '其他原因'];
 
@@ -33,7 +34,8 @@ Page({
       });
       wx.showToast({ title: '已提交，等待审核' });
       setTimeout(() => wx.redirectTo({ url: '/pages/after-sale/list' }), 700);
-    } finally {
+    } catch (err) {
+      showError(err, '提交失败');
       this.setData({ submitting: false });
     }
   },

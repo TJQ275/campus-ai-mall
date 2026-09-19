@@ -8,8 +8,10 @@ const ENV = {
   prod: 'https://your-domain.com/api',
 };
 
+const BASE_URL = ENV.dev;
+
 module.exports = {
-  BASE_URL: ENV.dev,
-  /** 图片资源前缀（后端静态托管的 /uploads） */
-  ASSET_URL: ENV.dev.replace('/api', ''),
+  BASE_URL,
+  /** 图片资源前缀：后端静态托管的 /uploads 只给相对路径，必须补上源站才能塞进 <image src> */
+  ASSET_URL: BASE_URL.replace(/\/api\/?$/, ''),
 };

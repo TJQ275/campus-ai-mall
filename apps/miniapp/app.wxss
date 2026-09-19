@@ -57,6 +57,18 @@ button::after { border: none; }
   margin-right: 8rpx;
 }
 .empty { text-align: center; color: #969799; padding: 120rpx 0; font-size: 26rpx; }
+/*
+ * 图片加载失败时的文字占位。
+ * 失败的 <image> 只剩一个灰框，看起来像「加载中」；配合 binderror 换成这行字，
+ * 用户至少知道是图挂了而不是页面卡住。尺寸沿用原图 class，只补排版。
+ */
+.cover-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #c8c9cc;
+  font-size: 22rpx;
+}
 .product-card { display: flex; padding: 20rpx 0; border-bottom: 1rpx solid #f2f3f5; }
 .product-card:last-child { border-bottom: none; }
 .product-cover {

@@ -7,7 +7,9 @@
 
   <view class="card">
     <view class="product-card" wx:for="{{order.items}}" wx:key="id">
-      <image class="product-cover" src="{{item.coverSnapshot}}" mode="aspectFill" />
+      <image wx:if="{{!item.coverFailed}}" class="product-cover" src="{{item.coverSnapshot}}" mode="aspectFill" lazy-load
+             data-path="order.items[{{index}}].coverFailed" binderror="onImageError" />
+      <view wx:else class="product-cover cover-fallback">暂无图</view>
       <view class="product-info">
         <view class="product-title">{{item.titleSnapshot}}</view>
         <view class="between">

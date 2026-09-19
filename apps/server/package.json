@@ -7,13 +7,16 @@
     "build": "nest build",
     "start": "node dist/main.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test:unit": "tsx --test \"src/**/*.test.ts\"",
     "db:generate": "drizzle-kit generate",
     "db:push": "tsx src/db/push.ts",
     "db:seed": "tsx src/db/seed.ts",
     "db:reset": "tsx src/db/push.ts --reset && tsx src/db/seed.ts",
     "db:studio": "drizzle-kit studio",
     "ai:embed": "tsx src/db/embed.ts",
-    "demo:prepare": "tsx src/db/prepare-demo.ts"
+    "demo:prepare": "tsx src/db/prepare-demo.ts",
+    "admin:password": "tsx src/db/admin-password.ts",
+    "data:clear-demo": "tsx src/db/clear-demo-data.ts"
   },
   "dependencies": {
     "@campus/shared": "workspace:*",
@@ -25,8 +28,6 @@
     "@nestjs/jwt": "^12.0.2",
     "@nestjs/platform-express": "^12.0.3",
     "@nestjs/swagger": "^12.0.1",
-    "class-transformer": "^0.5.1",
-    "class-validator": "^0.15.1",
     "dotenv": "^18.0.1",
     "drizzle-orm": "^0.45.2",
     "pg": "^8.23.0",

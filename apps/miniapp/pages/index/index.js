@@ -1,5 +1,6 @@
 const api = require('../../utils/api');
-const { decorateProduct } = require('../../utils/format');
+const { decorateProduct, assetUrl } = require('../../utils/format');
+const { showError, setCartBadge, onImageError } = require('../../utils/ui');
 
 Page({
   data: {
@@ -22,7 +23,7 @@ Page({
   },
 
   onPullDownRefresh() {
-    this.load().then(() => wx.stopPullDownRefresh());
+    this.load().then(() => wx.stopPullDownRefresh()).catch(() => wx.stopPullDownRefresh());
   },
 
   async load() {
@@ -31,7 +32,7 @@ Page({
       await api.ensureLogin();
       const home = await api.home();
       this.setData({
-        banners: home.banners || [],
+        banners: (home.banners || []).map((b) => Object.assign({}, b, { image: assetUrl(b.image) })),
         categories: (home.categories || []).slice(0, 10),
         recommend: (home.recommend || []).map(decorateProduct),
         hot: (home.hot || []).map(decorateProduct),
@@ -39,7 +40,7 @@ Page({
         greeting: home.greeting || '',
       });
     } catch (err) {
-      /* request 层已经提示过 */
+      showError(err, '首页加载失败，下拉重试');
     } finally {
       this.setData({ loading: false });
     }
@@ -48,10 +49,9 @@ Page({
   async refreshCartBadge() {
     try {
       const cart = await api.cart();
-      if (cart.totalQuantity > 0) wx.setTabBarBadge({ index: 2, text: String(cart.totalQuantity) });
-      else wx.removeTabBarBadge({ index: 2 });
-    } catch (err) {
-      /* 未登录时忽略 */
+      setCartBadge(cart.totalQuantity);
+    } catch {
+      /* 未登录/网络异常时角标不是关键路径，静默即可（request 层已经提示过） */
     }
   },
 
@@ -80,4 +80,6 @@ Page({
       },
     });
   },
+
+  onImageError: onImageError,
 });

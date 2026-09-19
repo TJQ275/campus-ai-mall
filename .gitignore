@@ -4,6 +4,9 @@ build/
 .output/
 coverage/
 *.log
+# TS 增量编译缓存：不同机器/不同 Node 版本下会互相污染，
+# 而且它记录的产物是被忽略的 dist/ —— 入库会导致「干净检出时 tsc 认为无需 emit」
+*.tsbuildinfo
 .env
 .env.local
 .env.*.local
@@ -11,6 +14,9 @@ coverage/
 # PGlite 本地数据文件（零安装开发库，不入库）
 .data/
 apps/server/.data/
+
+# 清理演示数据前的自动备份（本地保留，不入库）
+apps/server/backups/
 
 # 微信开发者工具
 apps/miniapp/dist/

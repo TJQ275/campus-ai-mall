@@ -35,9 +35,13 @@
       { "pagePath": "pages/mine/index", "text": "我的" }
     ]
   },
-  "permission": {
-    "scope.userLocation": { "desc": "用于选择宿舍楼自提点" }
+  "networkTimeout": {
+    "request": 15000,
+    "downloadFile": 15000,
+    "uploadFile": 15000,
+    "connectSocket": 15000
   },
+  "lazyCodeLoading": "requiredComponents",
   "sitemapLocation": "sitemap.json",
   "style": "v2"
 }

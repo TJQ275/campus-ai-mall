@@ -32,9 +32,11 @@
         <view class="bubble assistant typing" wx:if="{{item.streaming && !item.text}}">正在思考…</view>
 
         <view class="cards" wx:if="{{item.cards.length}}">
-          <view class="chat-card" wx:for="{{item.cards}}" wx:for-item="card" wx:key="id"
+          <view class="chat-card" wx:for="{{item.cards}}" wx:for-item="card" wx:for-index="ci" wx:key="id"
                 data-id="{{card.id}}" bindtap="goProduct">
-            <image class="chat-cover" src="{{card.cover}}" mode="aspectFill" />
+            <image wx:if="{{!card.coverFailed}}" class="chat-cover" src="{{card.cover}}" mode="aspectFill" lazy-load
+                   data-path="messages[{{index}}].cards[{{ci}}].coverFailed" binderror="onImageError" />
+            <view wx:else class="chat-cover cover-fallback">暂无图</view>
             <view class="chat-info">
               <view class="chat-title">{{card.title}}</view>
               <view class="between">

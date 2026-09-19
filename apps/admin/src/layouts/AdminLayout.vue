@@ -38,28 +38,22 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
-import { api } from '../api';
+import { api, type AiStats } from '../api';
+import { menus } from '../router';
+import { runAction } from '../composables/async';
 import { useAuthStore } from '../stores/auth';
 
 const route = useRoute();
 const router = useRouter();
 const auth = useAuthStore();
-const aiMode = ref<{ mock: boolean; model: string }>({ mock: true, model: 'mock' });
-
-const menus = [
-  { path: '/dashboard', title: '数据概览', icon: 'DataLine' },
-  { path: '/ai/logs', title: 'AI 调用日志', icon: 'MagicStick' },
-  { path: '/ai/conversations', title: 'AI 会话回放', icon: 'ChatDotRound' },
-  { path: '/ai/knowledge', title: 'AI 知识库', icon: 'Notebook' },
-  { path: '/products', title: '商品管理', icon: 'Goods' },
-  { path: '/orders', title: '订单管理', icon: 'List' },
-  { path: '/after-sales', title: '售后管理', icon: 'RefreshLeft' },
-  { path: '/users', title: '用户管理', icon: 'User' },
-];
+const aiMode = ref<AiStats['mode']>({ provider: '', model: 'mock', mock: true, embedding: '' });
 
 function logout() {
+  // 登录态清理走 store，跳转交给 router，不再各自改一份状态
   auth.logout();
-  router.push('/login');
+  void runAction(async () => {
+    await router.push('/login');
+  }, '退出失败');
 }
 
 onMounted(async () => {

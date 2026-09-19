@@ -1,7 +1,10 @@
 <view>
   <swiper class="banner" indicator-dots autoplay circular interval="4000">
     <swiper-item wx:for="{{banners}}" wx:key="id">
-      <image class="banner-img" src="{{item.image}}" mode="aspectFill" />
+      <!-- 首屏轮播不加 lazy-load：它是第一眼看到的内容 -->
+      <image wx:if="{{!item.imageFailed}}" class="banner-img" src="{{item.image}}" mode="aspectFill"
+             data-path="banners[{{index}}].imageFailed" binderror="onImageError" />
+      <view wx:else class="banner-img cover-fallback">图挂了</view>
       <view class="banner-text">{{item.title}}</view>
     </swiper-item>
   </swiper>
@@ -34,7 +37,9 @@
       <view class="muted">{{recommendStrategy}}</view>
     </view>
     <view class="product-card" wx:for="{{recommend}}" wx:key="id" data-id="{{item.id}}" bindtap="goProduct">
-      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" />
+      <image wx:if="{{!item.coverFailed}}" class="product-cover" src="{{item.cover}}" mode="aspectFill" lazy-load
+             data-path="recommend[{{index}}].coverFailed" binderror="onImageError" />
+      <view wx:else class="product-cover cover-fallback">暂无图</view>
       <view class="product-info">
         <view class="product-title">{{item.title}}</view>
         <view class="reason" wx:if="{{item.reason}}">{{item.reason}}</view>
@@ -49,7 +54,9 @@
   <view class="card">
     <view class="section-title">热销榜</view>
     <view class="product-card" wx:for="{{hot}}" wx:key="id" data-id="{{item.id}}" bindtap="goProduct">
-      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" />
+      <image wx:if="{{!item.coverFailed}}" class="product-cover" src="{{item.cover}}" mode="aspectFill" lazy-load
+             data-path="hot[{{index}}].coverFailed" binderror="onImageError" />
+      <view wx:else class="product-cover cover-fallback">暂无图</view>
       <view class="product-info">
         <view class="product-title">{{item.title}}</view>
         <view class="between">

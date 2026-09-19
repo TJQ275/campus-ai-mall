@@ -1,24 +1,13 @@
 import { Inject, Injectable, UnauthorizedException, Logger } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { eq } from 'drizzle-orm';
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
 import { loginLogs, userProfiles, users } from '../../db/schema/index.js';
 
-export function hashPassword(password: string): string {
-  const salt = randomBytes(16).toString('hex');
-  return 'scrypt$' + salt + '$' + scryptSync(password, salt, 64).toString('hex');
-}
-
-export function verifyPassword(password: string, stored: string | null): boolean {
-  if (!stored) return false;
-  const [algorithm, salt, hash] = stored.split('$');
-  if (algorithm !== 'scrypt' || !salt || !hash) return false;
-  const actual = scryptSync(password, salt, 64);
-  const expected = Buffer.from(hash, 'hex');
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
-}
+// 哈希实现放在 common/password.ts：seed 脚本与单元测试都要用，且不该被 Nest/数据库依赖拖累
+import { hashPassword, verifyPassword } from '../../common/password.js';
+export { hashPassword, verifyPassword };
 
 @Injectable()
 export class AuthService {

@@ -66,12 +66,15 @@ export class LlmService implements OnModuleInit {
   }
 
   status() {
+    // 注意用 this.current 而不是 this.provider：前者会先按最新配置重建实例，
+    // 否则后台刚保存完 Key，这里读到的还是重建前的旧 provider（mock）
+    const provider = this.current;
     const config = this.config.current;
     return {
-      provider: this.provider.name,
-      model: this.provider.model,
-      mock: this.provider.isMock,
-      baseUrl: this.provider.isMock ? null : config.baseUrl,
+      provider: provider.name,
+      model: provider.model,
+      mock: provider.isMock,
+      baseUrl: provider.isMock ? null : config.baseUrl,
       embedding: config.embeddingModel ? 'enabled' : 'disabled',
       /** 配置来自 .env 还是后台保存的数据库配置 */
       configSource: this.config.isOverridden('apiKey') ? 'admin' : 'env',

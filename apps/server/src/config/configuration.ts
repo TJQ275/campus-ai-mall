@@ -67,6 +67,7 @@ export function assertProductionSecrets(
         '可以用 node -e "console.log(require(\'crypto\').randomBytes(32).toString(\'hex\'))" 生成一个。',
     );
     process.exit(1);
+    return;
   }
   if (secret.length < 16) {
     logger.error('拒绝启动：JWT_SECRET 太短（至少 16 位），容易被暴力破解。');

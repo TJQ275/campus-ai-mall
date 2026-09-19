@@ -49,7 +49,7 @@
 
     <el-card shadow="never" style="margin-top: 16px">
       <template #header>AI 工具调用分布</template>
-      <el-table :data="aiStats.byTool" size="small">
+      <el-table :data="aiStats.byTool" size="small" v-loading="loading">
         <el-table-column prop="toolName" label="工具" />
         <el-table-column prop="calls" label="调用次数" width="110" />
         <el-table-column prop="avgMs" label="平均耗时" width="110">
@@ -63,19 +63,33 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue';
-import * as echarts from 'echarts';
-import { api, yuan } from '../api';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+// 只引入用到的图表与组件，避免把整个 echarts 打进 Dashboard chunk
+import * as echarts from 'echarts/core';
+import { BarChart, LineChart, PieChart } from 'echarts/charts';
+import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { CanvasRenderer } from 'echarts/renderers';
+import { api, PAY_CHANNEL_LABEL, yuan, type AiStats, type DashboardData } from '../api';
+import { reportError } from '../composables/async';
+
+echarts.use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
+
+type ChartInstance = ReturnType<typeof echarts.init>;
 
 const kpi = ref<Record<string, number>>({});
-const trend = ref<Record<string, any>[]>([]);
-const categorySales = ref<Record<string, any>[]>([]);
-const payChannels = ref<Record<string, any>[]>([]);
-const aiStats = ref<{ byTool: any[]; totals: Record<string, number>; mode: any }>({ byTool: [], totals: {}, mode: {} });
+const trend = ref<DashboardData['trend']>([]);
+const categorySales = ref<DashboardData['categorySales']>([]);
+const payChannels = ref<DashboardData['payChannels']>([]);
+const aiStats = ref<AiStats>({ byTool: [], totals: {}, trend: [], mode: { provider: '', model: '', mock: true, embedding: '' }, embeddingEnabled: false });
 const insight = ref<{ model: string; points: string[]; suggestion: string }>({ model: 'template', points: [], suggestion: '' });
+const loading = ref(false);
 const trendRef = ref<HTMLElement>();
 const categoryRef = ref<HTMLElement>();
 const channelRef = ref<HTMLElement>();
+
+const charts: ChartInstance[] = [];
+let resizeObserver: ResizeObserver | null = null;
+let resizeFrame = 0;
 
 const kpiCards = computed(() => [
   { label: '订单总数', value: kpi.value.order_count ?? 0 },
@@ -86,54 +100,133 @@ const kpiCards = computed(() => [
   { label: 'AI 促成订单', value: kpi.value.ai_order_count ?? 0 },
 ]);
 
-onMounted(async () => {
-  const data = await api.dashboard();
-  kpi.value = data.kpi;
-  trend.value = data.trend as Record<string, any>[];
-  categorySales.value = data.categorySales as Record<string, any>[];
-  payChannels.value = data.payChannels as Record<string, any>[];
-  aiStats.value = (await api.aiStats(30)) as any;
-  insight.value = (await api.insight()) as any;
+/** 容器尺寸变化才需要重绘；离开页面时 ResizeObserver 会和图表一起断开 */
+function observeResize() {
+  if (typeof ResizeObserver === 'undefined') return;
+  resizeObserver = new ResizeObserver(() => {
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => {
+      for (const chart of charts) {
+        if (!chart.isDisposed()) chart.resize();
+      }
+    });
+  });
+  for (const element of [trendRef.value, channelRef.value, categoryRef.value]) {
+    if (element) resizeObserver.observe(element);
+  }
+}
 
-  const trendChart = echarts.init(trendRef.value!);
+function disposeCharts() {
+  for (const chart of charts) chart.dispose();
+  charts.length = 0;
+  resizeObserver?.disconnect();
+  resizeObserver = null;
+  cancelAnimationFrame(resizeFrame);
+}
+
+/**
+ * 空数据时的图表兜底：ECharts 在数据为空时不会报错，但会画出一个空坐标轴
+ * 或者一个灰色空环，看起来像页面坏了。统一换成一句居中的提示。
+ */
+function emptyState(text: string) {
+  return {
+    title: {
+      text,
+      left: 'center',
+      top: 'middle',
+      textStyle: { color: '#a8abb2', fontSize: 13, fontWeight: 'normal' as const },
+    },
+  };
+}
+
+function renderCharts() {
+  // 数据回来前组件可能已经卸载，此时 ref 为 null：再 init 只会留下没人回收的实例
+  if (!trendRef.value || !channelRef.value || !categoryRef.value) return;
+  disposeCharts();
+
+  const trendChart = echarts.init(trendRef.value);
   trendChart.setOption({
     tooltip: { trigger: 'axis' },
-    legend: { data: ['订单数', '成交额(元)'] },
-    grid: { left: 40, right: 40, top: 40, bottom: 30 },
-    xAxis: { type: 'category', data: trend.value.map((t) => t.day) },
-    yAxis: [{ type: 'value' }, { type: 'value' }],
+    // 图例要给明确位置：不给时 ECharts 的 auto 定位会掉到图表底部，把 X 轴的日期盖住
+    legend: { data: ['订单数', '成交额(元)'], top: 0, left: 'center' },
+    // containLabel 让坐标轴文字也算进网格内，标签不会再被图形压住或裁掉
+    grid: { left: 8, right: 8, top: 48, bottom: 8, containLabel: true },
+    xAxis: { type: 'category', data: trend.value.map((t) => t.day), axisTick: { alignWithLabel: true } },
+    yAxis: [
+      { type: 'value', name: '订单数', minInterval: 1 },
+      { type: 'value', name: '成交额(元)' },
+    ],
     series: [
-      { name: '订单数', type: 'line', smooth: true, data: trend.value.map((t) => t.orders) },
-      { name: '成交额(元)', type: 'bar', yAxisIndex: 1, data: trend.value.map((t) => (t.amount / 100).toFixed(2)) },
+      { name: '订单数', type: 'line', smooth: true, symbolSize: 6, data: trend.value.map((t) => t.orders) },
+      {
+        name: '成交额(元)',
+        type: 'bar',
+        yAxisIndex: 1,
+        // 限宽 + 半透明：只有一两天有数据时，柱子不该糊满整个图表
+        barMaxWidth: 26,
+        itemStyle: { color: 'rgba(103, 194, 58, 0.5)' },
+        data: trend.value.map((t) => Number((t.amount / 100).toFixed(2))),
+      },
     ],
   });
 
-  const categoryChart = echarts.init(categoryRef.value!);
+  const categoryChart = echarts.init(categoryRef.value);
+  const hasCategorySales = categorySales.value.some((c) => c.qty > 0);
   categoryChart.setOption({
     tooltip: { trigger: 'axis' },
-    grid: { left: 90, right: 30, top: 20, bottom: 30 },
-    xAxis: { type: 'value' },
+    grid: { left: 8, right: 24, top: 16, bottom: 8, containLabel: true },
+    xAxis: { type: 'value', minInterval: 1 },
     yAxis: { type: 'category', data: categorySales.value.map((c) => c.name).reverse() },
-    series: [{ type: 'bar', data: categorySales.value.map((c) => c.qty).reverse(), itemStyle: { color: '#67c23a' } }],
+    series: [
+      {
+        type: 'bar',
+        barMaxWidth: 20,
+        itemStyle: { color: '#67c23a' },
+        data: categorySales.value.map((c) => c.qty).reverse(),
+      },
+    ],
+    // 没有任何销量时不要画一排空坐标轴，直接给一句人话
+    ...(hasCategorySales ? {} : emptyState('还没有销量数据')),
   });
 
-  const channelChart = echarts.init(channelRef.value!);
-  const channelLabel: Record<string, string> = { wechat: '微信', alipay: '支付宝', balance: '余额', unpaid: '未支付' };
+  const channelChart = echarts.init(channelRef.value);
+  // 没有订单时饼图会渲染成一个灰色空环，看起来像坏了
+  const hasChannels = payChannels.value.length > 0;
   channelChart.setOption({
     tooltip: { trigger: 'item' },
     series: [
       {
         type: 'pie',
         radius: ['40%', '68%'],
-        data: payChannels.value.map((c) => ({ name: channelLabel[c.channel] || c.channel, value: c.count })),
+        data: payChannels.value.map((c) => ({ name: PAY_CHANNEL_LABEL[c.channel] || c.channel, value: c.count })),
       },
     ],
+    ...(hasChannels ? {} : emptyState('还没有支付记录')),
   });
 
-  window.addEventListener('resize', () => {
-    trendChart.resize();
-    categoryChart.resize();
-    channelChart.resize();
-  });
-});
+  charts.push(trendChart, categoryChart, channelChart);
+  observeResize();
+}
+
+async function loadAll() {
+  loading.value = true;
+  try {
+    const [data, stats, report] = await Promise.all([api.dashboard(), api.aiStats(30), api.insight()]);
+    kpi.value = data.kpi;
+    trend.value = data.trend ?? [];
+    categorySales.value = data.categorySales ?? [];
+    payChannels.value = data.payChannels ?? [];
+    aiStats.value = stats;
+    insight.value = report;
+    renderCharts();
+  } catch (error) {
+    reportError(error, '概览数据加载失败');
+  } finally {
+    loading.value = false;
+  }
+}
+
+onMounted(loadAll);
+// 图表实例与 ResizeObserver 必须一起释放，否则每次进入本页都会泄漏
+onBeforeUnmount(disposeCharts);
 </script>

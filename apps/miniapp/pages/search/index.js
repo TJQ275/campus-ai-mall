@@ -1,12 +1,20 @@
 const api = require('../../utils/api');
 const { decorateProduct } = require('../../utils/format');
+const { showError, onImageError } = require('../../utils/ui');
 
 Page({
   data: { keyword: '', list: [], searched: false, loading: false, hotWords: ['辣条', '薯片', '高等数学', '数据结构', '考研'] },
 
   onLoad(options) {
     if (options.keyword) {
-      this.setData({ keyword: options.keyword });
+      // 跳转参数是 URL 编码过的，中文关键词不解码会搜不到东西
+      let keyword = options.keyword;
+      try {
+        keyword = decodeURIComponent(keyword);
+      } catch {
+        /* 不是合法编码就按原样用 */
+      }
+      this.setData({ keyword });
       this.search();
     }
   },
@@ -27,6 +35,8 @@ Page({
     try {
       const result = await api.products({ keyword, pageSize: 20 });
       this.setData({ list: (result.list || []).map(decorateProduct), searched: true });
+    } catch (err) {
+      showError(err, '搜索失败，请重试');
     } finally {
       this.setData({ loading: false });
     }
@@ -50,6 +60,8 @@ Page({
             });
           }
           this.setData({ list: (result.list || []).map(decorateProduct), searched: true, keyword: 'ISBN ' + isbn });
+        } catch (err) {
+          showError(err, '查询失败，请重试');
         } finally {
           this.setData({ loading: false });
         }
@@ -60,4 +72,6 @@ Page({
   goProduct(e) {
     wx.navigateTo({ url: '/pages/product/detail?id=' + e.currentTarget.dataset.id });
   },
+
+  onImageError: onImageError,
 });

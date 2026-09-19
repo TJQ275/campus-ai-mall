@@ -10,6 +10,7 @@
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
+    "@campus/shared": "workspace:*",
     "@element-plus/icons-vue": "^2.3.2",
     "axios": "^1.20.0",
     "echarts": "^6.1.0",
@@ -21,6 +22,8 @@
   "devDependencies": {
     "@vitejs/plugin-vue": "^6.0.9",
     "typescript": "5.9.3",
+    "unplugin-auto-import": "^21.1.0",
+    "unplugin-vue-components": "^32.1.0",
     "vite": "^8.3.0",
     "vue-tsc": "^3.3.11"
   }
