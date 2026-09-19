@@ -1,0 +1,20 @@
+{
+  "name": "campus-ai-mall",
+  "private": true,
+  "version": "0.1.0",
+  "description": "校园零食 + 二手书 AI 商城：原生微信小程序 / NestJS 后端 / Vue3 管理后台",
+  "packageManager": "pnpm@11.5.2",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev:server": "pnpm --filter @campus/server dev",
+    "db:generate": "pnpm --filter @campus/server db:generate",
+    "db:push": "pnpm --filter @campus/server db:push",
+    "db:seed": "pnpm --filter @campus/server db:seed",
+    "db:studio": "pnpm --filter @campus/server db:studio",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint"
+  }
+}

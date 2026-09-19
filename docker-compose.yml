@@ -1,0 +1,33 @@
+# 生产 / 团队协作环境：一条命令起全套依赖
+# 本地个人开发无需 Docker —— 默认用 PGlite（WASM Postgres，零安装）
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: campus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: campus
+      POSTGRES_PASSWORD: campus
+      POSTGRES_DB: campus_mall
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U campus -d campus_mall']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: campus-redis
+    restart: unless-stopped
+    ports:
+      - '6379:6379'
+    volumes:
+      - redisdata:/data
+
+volumes:
+  pgdata:
+  redisdata:

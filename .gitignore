@@ -1,0 +1,29 @@
+node_modules/
+dist/
+build/
+.output/
+coverage/
+*.log
+.env
+.env.local
+.env.*.local
+
+# PGlite 本地数据文件（零安装开发库，不入库）
+.data/
+apps/server/.data/
+
+# 微信开发者工具
+apps/miniapp/dist/
+apps/miniapp/node_modules/
+project.private.config.json
+
+# 编辑器 / 系统
+.vscode/*
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+.DS_Store
+
+# 上传的图片（演示资源可保留占位）
+apps/server/uploads/*
+!apps/server/uploads/.gitkeep
