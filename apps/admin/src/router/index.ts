@@ -1,6 +1,6 @@
 import type { Component } from 'vue';
 import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router';
-import { ChatDotRound, DataLine, Goods, Key, List, MagicStick, Notebook, RefreshLeft, Setting, User } from '@element-plus/icons-vue';
+import { ChatDotRound, Coin, DataLine, Goods, Key, List, MagicStick, Notebook, RefreshLeft, Setting, User } from '@element-plus/icons-vue';
 import { useAuthStore } from '../stores/auth';
 
 declare module 'vue-router' {
@@ -22,6 +22,7 @@ const layoutRoutes: RouteRecordRaw[] = [
   { path: 'ai/logs', name: 'ai-logs', component: () => import('../views/AiLogs.vue'), meta: { title: 'AI 调用日志', icon: MagicStick } },
   { path: 'ai/conversations', name: 'ai-conversations', component: () => import('../views/AiConversations.vue'), meta: { title: 'AI 会话回放', icon: ChatDotRound } },
   { path: 'ai/knowledge', name: 'knowledge', component: () => import('../views/Knowledge.vue'), meta: { title: 'AI 知识库', icon: Notebook } },
+  { path: 'ai/cost', name: 'ai-cost', component: () => import('../views/AiCost.vue'), meta: { title: 'AI 成本', icon: Coin } },
   { path: 'ai/settings', name: 'ai-settings', component: () => import('../views/Settings.vue'), meta: { title: 'AI 设置', icon: Setting } },
   { path: 'products', name: 'products', component: () => import('../views/Products.vue'), meta: { title: '商品管理', icon: Goods } },
   { path: 'orders', name: 'orders', component: () => import('../views/Orders.vue'), meta: { title: '订单管理', icon: List } },

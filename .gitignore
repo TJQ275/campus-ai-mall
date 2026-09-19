@@ -18,6 +18,13 @@ apps/server/.data/
 # 清理演示数据前的自动备份（本地保留，不入库）
 apps/server/backups/
 
+# AI 评测：编译产物与评测报告（都是本地产物）
+apps/server/.eval-build/
+apps/server/.eval/
+
+# 本机工具与诊断产物：内网穿透客户端（50MB+ 二进制）、隧道日志、连通性测试输出
+tools/
+
 # 微信开发者工具
 apps/miniapp/dist/
 apps/miniapp/node_modules/

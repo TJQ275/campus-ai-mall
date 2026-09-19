@@ -1,0 +1,66 @@
+# AI优选零食 —— 生产编排（PostgreSQL + 后端/后台）
+#
+# 用法：
+#   1. 在仓库根目录建一个 .env.production（照抄下面 environment 里带 ${} 的变量）
+#   2. docker compose -f deploy/docker-compose.prod.yml --env-file .env.production up -d --build
+#   3. 首次要建表 + 灌数据：
+#      docker compose -f deploy/docker-compose.prod.yml exec server \
+#        sh -c "cd /app/apps/server && node --import tsx src/db/push.ts && node --import tsx src/db/seed.ts"
+#
+# 注意：server 只绑 127.0.0.1:3100，对外必须经 nginx（见 deploy/nginx.conf）。
+# 这样数据库和后端都不会直接暴露到公网。
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16     # 自带 pgvector，不用编译
+    container_name: campus-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-campus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?生产环境必须设置 POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB:-campus_mall}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-campus} -d ${POSTGRES_DB:-campus_mall}']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    # 不映射端口：只有同一个 docker 网络里的 server 能连，公网碰不到
+
+  server:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    container_name: campus-server
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_ENV: production
+      PORT: 3100
+      DB_DRIVER: postgres
+      DATABASE_URL: postgres://${POSTGRES_USER:-campus}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-campus_mall}
+      # 生产环境这两项是硬性的：JWT_SECRET 不能是占位串，否则后端拒绝启动（故意设计）
+      JWT_SECRET: ${JWT_SECRET:?必须设置一个随机 JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-7d}
+      # 前端和后端同源（都由这个服务托管），所以 CORS 不会触发；
+      # 万一你有额外域名，用逗号分隔写在这里
+      CORS_ORIGINS: ${CORS_ORIGINS:-}
+      # 大模型：留空则用内置的 MockProvider（规则 + 协同过滤），没有 Key 也能演示
+      LLM_BASE_URL: ${LLM_BASE_URL:-https://api.deepseek.com/v1}
+      LLM_API_KEY: ${LLM_API_KEY:-}
+      LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
+      LLM_EMBEDDING_DIM: ${LLM_EMBEDDING_DIM:-1024}
+      SWAGGER_ENABLED: ${SWAGGER_ENABLED:-false}
+      WX_APPID: ${WX_APPID:-}
+      WX_SECRET: ${WX_SECRET:-}
+    volumes:
+      - uploads:/app/apps/server/uploads   # 商品图，别丢
+    ports:
+      - '127.0.0.1:3100:3100'              # 只给本机 nginx 用
+
+volumes:
+  pgdata:
+  uploads:

@@ -16,6 +16,7 @@ import { MediaTools } from './tools/media.tools.js';
 import { MerchantTools } from './tools/merchant.tools.js';
 import { CopywritingService } from './copywriting.service.js';
 import { EmbeddingService } from './embedding.service.js';
+import { AiUsageService } from './usage.service.js';
 
 @Module({
   imports: [CatalogModule, CartModule, OrderModule, AfterSaleModule],
@@ -33,7 +34,8 @@ import { EmbeddingService } from './embedding.service.js';
     MediaTools,
     MerchantTools,
     CopywritingService,
+    AiUsageService,
   ],
-  exports: [AiService, AgentService, LlmService, EmbeddingService, CopywritingService, ToolRegistry, LlmConfigService],
+  exports: [AiService, AgentService, LlmService, EmbeddingService, CopywritingService, ToolRegistry, LlmConfigService, AiUsageService],
 })
 export class AiModule {}

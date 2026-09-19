@@ -21,6 +21,8 @@ export class AdminAiService {
 
   /** 调用统计：按工具聚合，一眼看出 AI 到底在干什么 */
   async stats(days = 7) {
+    // 向量检索的健康状况：失败是静默降级，必须显式暴露出来
+    const embeddingHealth = this.embedding.health();
     const since = new Date(Date.now() - days * 86400000);
     const byTool = await this.db.execute(sql`
       select tool_name,
@@ -66,6 +68,8 @@ export class AdminAiService {
       trend: (trend as unknown as { rows: unknown[] }).rows,
       mode: this.llm.status(),
       embeddingEnabled: this.embedding.enabled,
+      // 向量检索是否正在「静默降级」—— 配了模型但调用失败时会带上原因和修复建议
+      embeddingHealth,
     };
   }
 

@@ -29,7 +29,8 @@
     "test": "pnpm test:unit && pnpm test:acceptance && pnpm test:hardening && pnpm test:miniapp",
     "demo:prepare": "pnpm --filter @campus/server demo:prepare",
     "setup": "pnpm db:push && pnpm db:seed && pnpm demo:prepare",
-    "dev": "pwsh -File scripts/dev.ps1"
+    "dev": "pwsh -File scripts/dev.ps1",
+    "ai:eval": "pnpm --filter @campus/server ai:eval"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

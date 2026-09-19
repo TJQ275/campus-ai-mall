@@ -100,3 +100,38 @@ export const aiFeedbacks = pgTable('ai_feedback', {
   comment: varchar('comment', { length: 300 }),
   createdAt,
 });
+
+
+/**
+ * 用量与费用明细：**每一次**模型调用都记一条。
+ *
+ * 为什么不能只靠 ai_message 上的 prompt_tokens：
+ * 一次对话可能调用模型多轮（工具回灌后再问一遍），而 ai_message 只在**最终回复**上落了 token，
+ * 中间几轮的消耗全丢了 —— 工具调用越多，账差得越离谱。
+ * 这张表按「调用」粒度记录，账才对得上。
+ */
+export const aiUsage = pgTable('ai_usage', {
+  id: serial('id').primaryKey(),
+  userId: integer('user_id'),
+  conversationId: integer('conversation_id'),
+  /** shopping | support | merchant | admin | eval */
+  scene: varchar('scene', { length: 20 }),
+  model: varchar('model', { length: 60 }).notNull(),
+  /** chat 对话 | embedding 向量 | vision 识图 | test 连通性测试 */
+  kind: varchar('kind', { length: 20 }).notNull().default('chat'),
+  promptTokens: integer('prompt_tokens').notNull().default(0),
+  completionTokens: integer('completion_tokens').notNull().default(0),
+  /** 费用，单位微元（1 元 = 1_000_000）—— 整数存储，避免浮点累积误差 */
+  costMicro: integer('cost_micro').notNull().default(0),
+  latencyMs: integer('latency_ms').notNull().default(0),
+  /** 降级到 MockProvider 的调用不计费，但要能看出来 */
+  degraded: boolean('degraded').notNull().default(false),
+  /** 计价时用的价目表版本，改价后历史账单仍可对账 */
+  priceVersion: varchar('price_version', { length: 20 }),
+  createdAt,
+}, (t) => [
+  index('idx_aiusage_user').on(t.userId),
+  index('idx_aiusage_conv').on(t.conversationId),
+  index('idx_aiusage_created').on(t.createdAt),
+  index('idx_aiusage_model').on(t.model),
+]);

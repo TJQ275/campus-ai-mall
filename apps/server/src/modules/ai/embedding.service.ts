@@ -5,6 +5,7 @@ import type { Db } from '../../db/client.js';
 import { aiKnowledge, products } from '../../db/schema/index.js';
 import { EMBEDDING_DIM } from '../../db/schema/_shared.js';
 import { LlmService } from './llm.service.js';
+import { AiUsageService } from './usage.service.js';
 
 /**
  * 向量能力开关。
@@ -18,10 +19,37 @@ export class EmbeddingService {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly llm: LlmService,
+    private readonly usage: AiUsageService,
   ) {}
+
+  /** 最近一次向量调用失败的原因。失败是「静默降级」，不记下来就没人知道检索其实已经退化了 */
+  private lastFailure: { message: string; at: number; model: string } | null = null;
 
   get enabled(): boolean {
     return Boolean(this.llm.runtimeConfig.embeddingModel) && !this.llm.current.isMock;
+  }
+
+  /**
+   * 向量检索的健康状况，给管理后台展示用。
+   *
+   * 为什么需要：embedding 失败时系统会**自动退回关键词检索**，业务不报错、
+   * 但检索质量已经悄悄降级了。实测把 embeddingModel 填成 deepseek-flash（DeepSeek 没有
+   * 向量接口）时，每次知识库检索都打一次 404 再重试，日志里全是告警，而页面上完全看不出来。
+   */
+  health() {
+    const model = this.llm.runtimeConfig.embeddingModel;
+    return {
+      enabled: this.enabled,
+      model: model || null,
+      /** 配了模型但最近一次调用失败 —— 说明向量检索实际不可用，正在吃关键词兜底 */
+      failing: Boolean(this.lastFailure),
+      lastError: this.lastFailure?.message ?? null,
+      lastErrorAt: this.lastFailure ? new Date(this.lastFailure.at).toISOString() : null,
+      /** 常见误配提示 */
+      hint: this.lastFailure && /404|not found|does not exist/i.test(this.lastFailure.message)
+        ? '该服务商可能没有向量接口（DeepSeek 就没有）。请换成具备 embedding 的服务，例如通义 text-embedding-v3、智谱 embedding-3，或本地 Ollama 的 nomic-embed-text。'
+        : null,
+    };
   }
 
   async embed(texts: string[]): Promise<number[][] | null> {
@@ -40,9 +68,24 @@ export class EmbeddingService {
         );
         return null;
       }
+      // 向量调用也花钱，记一笔账。
+      // 上游只回向量、不回 usage，所以按字符数估算 token：
+      // 中文约 1 字 ≈ 1 token，英文约 4 字符 ≈ 1 token，取 1.5 字符/token 折中。
+      // 是估算值，但对「向量花了多少钱」这个量级判断足够用。
+      const chars = texts.reduce((sum, t) => sum + (t?.length ?? 0), 0);
+      await this.usage.record({
+        model: this.llm.runtimeConfig.embeddingModel || provider.model,
+        kind: 'embedding',
+        promptTokens: Math.ceil(chars / 1.5),
+        completionTokens: 0,
+      });
+      this.lastFailure = null;
       return vectors;
     } catch (error) {
-      this.logger.warn('embedding 调用失败，退回关键词检索: ' + (error as Error).message);
+      const message = (error as Error).message;
+      // 记下来，让后台能显示「向量检索已失效，当前在用关键词兜底」
+      this.lastFailure = { message, at: Date.now(), model: this.llm.runtimeConfig.embeddingModel };
+      this.logger.warn('embedding 调用失败，退回关键词检索: ' + message);
       return null;
     }
   }

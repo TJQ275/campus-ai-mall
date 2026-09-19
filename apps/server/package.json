@@ -16,7 +16,8 @@
     "ai:embed": "tsx src/db/embed.ts",
     "demo:prepare": "tsx src/db/prepare-demo.ts",
     "admin:password": "tsx src/db/admin-password.ts",
-    "data:clear-demo": "tsx src/db/clear-demo-data.ts"
+    "data:clear-demo": "tsx src/db/clear-demo-data.ts",
+    "ai:eval": "tsc -p tsconfig.eval.json && node .eval-build/db/eval.js"
   },
   "dependencies": {
     "@campus/shared": "workspace:*",

@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import type { AiChatInput, AiEvent } from '@campus/shared';
 import { AiService } from './ai.service.js';
 import { LlmService } from './llm.service.js';
+import { AiUsageService } from './usage.service.js';
 import { ToolRegistry } from './tools/tool.registry.js';
 import { buildSystemPrompt } from './prompt.js';
 import { buildHistoryMessages } from './history.js';
@@ -9,7 +10,25 @@ import type { AiContext } from './tools/tool.types.js';
 import type { ChatMessage, ChatResult, LlmProvider, LlmToolCall, ToolSpec } from './provider/types.js';
 import type { ProductCard } from '../catalog/catalog.service.js';
 
-const MAX_TOOL_ROUNDS = 4;
+// 实测 4 轮不够：模型遇到「把X加到购物车」会先查画像 → 再检索两次 → 再看详情，
+// 4 轮被检索吃光，真正的 add_to_cart 根本没机会调用，收尾时还会谎称已完成。
+// 配合「相同参数去重」，放宽到 6 轮既够用又不会被无限检索拖住。
+const MAX_TOOL_ROUNDS = 6;
+
+/**
+ * 轮次用尽后的收尾提示。
+ *
+ * 最后那句诚实性要求是必须的：实测模型在没有工具可用时，会直接宣称
+ * 「已把商品加入购物车」——而它根本没调用 add_to_cart，用户会以为购物车里真有东西。
+ * 宁可让模型说「这件事还没完成」，也不能给一个假的成功确认。
+ */
+const FORCED_ANSWER_HINT = [
+  '（系统提醒）已经达到工具调用次数上限，本轮不能再调用任何工具。',
+  '请基于上面已经拿到的工具结果，用中文回答用户最初的问题。',
+  '重要的诚实性要求：如果用户要求的是一个「操作」（加购、下单、申请售后等），',
+  '而上面的对话里并没有该操作的工具执行结果，你必须如实说明「这件事还没完成」，',
+  '并告诉用户再说一次或点确认即可；绝对不许声称已经完成。',
+].join('');
 
 @Injectable()
 export class AgentService {
@@ -19,6 +38,7 @@ export class AgentService {
     private readonly ai: AiService,
     private readonly llm: LlmService,
     private readonly registry: ToolRegistry,
+    private readonly usage: AiUsageService,
   ) {}
 
   /**
@@ -63,8 +83,22 @@ export class AgentService {
     ];
 
     const cards: ProductCard[] = [];
+    // 同一轮对话里「工具名 + 参数」的指纹集合。
+    // 实测轻量模型会拿一模一样的参数反复调 search_products，
+    // 4 轮上限被烧光，用户拿到的是「工具调用次数已达上限」而不是答案。
+    // 重复调用直接不执行，改成回灌一条提示让模型基于已有结果作答。
+    const calledFingerprints = new Set<string>();
     let degraded = this.llm.current.isMock;
     let finalMessageId: number | null = null;
+
+    // 日预算闸门：今天花的钱超过预算就整轮降级到本地 Mock，避免账单失控。
+    // 用户拿到的回复依旧完整可用（规则 + 协同过滤），只是不再调用收费模型。
+    const budget = await this.usage.budgetStatus();
+    const overBudget = budget.overBudget && !this.llm.current.isMock;
+    if (overBudget) {
+      degraded = true;
+      this.logger.warn('今日 AI 预算已用完（已花 ' + budget.spentMicro + ' 微元 / 预算 ' + budget.budgetMicro + '），本轮降级为本地模式');
+    }
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
       // 客户端已经断开：立刻停止，不再发起新的模型调用
@@ -72,7 +106,8 @@ export class AgentService {
         this.logger.log('客户端已断开，停止本轮对话（已进行 ' + round + ' 轮工具调用）');
         return;
       }
-      let provider: LlmProvider = this.llm.current;
+      // 超预算时整轮都用 Mock，不再发起任何收费调用
+      let provider: LlmProvider = overBudget ? this.llm.mock() : this.llm.current;
       let content = '';
       let result: ChatResult | null = null;
       let emitted = false;
@@ -110,6 +145,22 @@ export class AgentService {
 
       if (!result) break;
       degraded = degraded || result.degraded;
+
+      // 每一轮模型调用都记一笔账，**包含中间的工具轮次**。
+      // 修掉的 bug：原先只在「最终回复」那条 ai_message 上落 token，
+      // 一次 3 轮工具的对话实际付了 3 次调用的钱，账上却只记了最后 1 次。
+      await this.usage.record({
+        userId,
+        conversationId: conversation.id,
+        scene: ctx.scene,
+        model: result.model,
+        kind: 'chat',
+        promptTokens: result.usage.promptTokens,
+        completionTokens: result.usage.completionTokens,
+        latencyMs: Date.now() - started,
+        // 用「这一次调用」的降级状态，而不是累积值，否则一次降级会把后面所有调用都标成降级
+        degraded: result.degraded,
+      });
 
       // 没有工具调用 → 这就是最终回复
       if (!result.toolCalls.length) {
@@ -150,18 +201,66 @@ export class AgentService {
         latencyMs: Date.now() - started,
         degraded,
       });
-      if (result.content) yield { type: 'text', delta: result.content };
+      // 这里**不能**再 yield result.content：provider 在流式读循环里已经把每个 delta
+      // 通过 { type: 'text' } 发过了，result.content 是它们的拼接。再发一次等于把这句话重播一遍
+      // （评测跑出来的现象是同一句话连着出现两遍）。
       messages.push({ role: 'assistant', content: result.content, tool_calls: result.toolCalls });
 
       for (const call of result.toolCalls) {
+        const fingerprint = call.name + ':' + JSON.stringify(call.arguments ?? {});
+        if (calledFingerprints.has(fingerprint)) {
+          // 不执行，回灌一条提示让模型基于已有结果作答
+          messages.push({
+            role: 'tool',
+            tool_call_id: call.id,
+            name: call.name,
+            content: JSON.stringify({
+              note: '你已经用完全相同的参数调用过这个工具，结果就在上面的对话里。请直接据此回答用户，不要再次调用。',
+              repeated: true,
+            }),
+          });
+          yield { type: 'tool_result', toolName: call.name, ok: true, brief: '参数与上次相同，已跳过重复调用' };
+          continue;
+        }
+        calledFingerprints.add(fingerprint);
         yield* this.executeTool(ctx, call, { conversationId: conversation.id, assistantMessageId: assistantTurn.id, cards, messages });
       }
     }
 
-    yield {
-      type: 'error',
-      message: '这轮对话的工具调用次数已达上限，请换个说法再试一次。',
-    };
+    // 轮次用尽。原实现是直接甩一句「工具调用次数已达上限」就结束 ——
+    // 评测里「推荐个方便面」正是走到这里，用户拿到的是**空回复**，非常糟糕。
+    // 正确做法是：把工具摘掉再问一次，逼模型用已经拿到的结果作答。
+    const lastProvider = overBudget ? this.llm.mock() : this.llm.current;
+    let forcedText = '';
+    try {
+      const forced = await lastProvider.chat(
+        [...messages, { role: 'user', content: FORCED_ANSWER_HINT }],
+        [],
+        signal,
+      );
+      forcedText = (forced.content ?? '').trim();
+      await this.usage.record({
+        userId, conversationId: conversation.id, scene: ctx.scene,
+        model: forced.model, kind: 'chat',
+        promptTokens: forced.usage.promptTokens, completionTokens: forced.usage.completionTokens,
+        latencyMs: Date.now() - started, degraded: forced.degraded,
+      });
+    } catch (error) {
+      this.logger.warn('收尾作答失败: ' + (error as Error).message);
+    }
+
+    if (forcedText) {
+      const saved = await this.ai.appendMessage({
+        conversationId: conversation.id, userId, role: 'assistant',
+        content: forcedText, cards, model: lastProvider.model,
+        latencyMs: Date.now() - started, degraded,
+      });
+      yield { type: 'text', delta: forcedText };
+      yield { type: 'done', conversationId: conversation.id, messageId: saved.id };
+      return;
+    }
+
+    yield { type: 'error', message: '这轮对话太复杂了，请换个说法再试一次。' };
     yield { type: 'done', conversationId: conversation.id, messageId: finalMessageId };
   }
 

@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
 import { AdminKnowledgeRequest, AdminProductSaveRequest } from '@campus/shared';
 import { AdminAiService } from './admin-ai.service.js';
@@ -6,13 +6,55 @@ import { AdminShopService } from './admin-shop.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { Roles, RolesGuard } from '../../common/guards/roles.guard.js';
 import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
+import { AiUsageService } from '../ai/usage.service.js';
+import { listPrices } from '../ai/pricing.js';
 
 @ApiTags('管理端-AI')
 @Controller('admin/ai')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles('admin')
 export class AdminAiController {
-  constructor(private readonly adminAi: AdminAiService) {}
+  constructor(
+    private readonly adminAi: AdminAiService,
+    private readonly usage: AiUsageService,
+  ) {}
+
+  // ==================== AI 成本 ====================
+
+  @Get('cost')
+  @ApiOperation({ summary: 'AI 成本看板：按天/模型/场景/用户聚合 + 预算状态' })
+  cost(@Query('days') days?: string) {
+    return this.usage.summary(days ? Number(days) : 7);
+  }
+
+  @Get('cost/prices')
+  @ApiOperation({ summary: '模型价目表与版本（账单对不上时改 pricing.ts）' })
+  prices() {
+    return listPrices();
+  }
+
+  @Get('budget')
+  @ApiOperation({ summary: '读取日预算与今日花费' })
+  budget() {
+    return this.usage.budgetStatus(true);
+  }
+
+  @Put('budget')
+  @ApiOperation({ summary: '设置日预算（0 = 不限额）。超预算后 AI 自动降级到本地模式，不再产生费用' })
+  async setBudget(@Body() body: { dailyBudgetMicro?: number; dailyBudgetYuan?: number }) {
+    // 优先用微元（前端内部单位），也兼容直接传元，方便手动调接口
+    const micro = body.dailyBudgetMicro !== undefined
+      ? Number(body.dailyBudgetMicro)
+      : Math.round((Number(body.dailyBudgetYuan) || 0) * 1_000_000);
+    await this.usage.setDailyBudgetMicro(micro);
+    return this.usage.budgetStatus(true);
+  }
+
+  @Get('cost/conversations/:id')
+  @ApiOperation({ summary: '单个会话花了多少钱' })
+  conversationCost(@Param('id', ParseIntPipe) id: number) {
+    return this.usage.costByConversation(id);
+  }
 
   @Get('stats')
   @ApiOperation({ summary: 'AI 调用统计：按工具聚合 + 运行模式' })

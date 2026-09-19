@@ -1,0 +1,41 @@
+# AI优选零食 —— systemd 服务单元（裸机部署，不用 Docker）
+#
+# 安装：
+#   sudo cp deploy/campus.service /etc/systemd/system/campus.service
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now campus
+#   sudo systemctl status campus
+#   sudo journalctl -u campus -f      # 看实时日志
+#
+# 改路径：如果你的代码不在 /opt/campus，把下面 WorkingDirectory 和 EnvironmentFile 一起改掉。
+
+[Unit]
+Description=AI优选零食 后端 + 管理后台
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=campus
+Group=campus
+
+WorkingDirectory=/opt/campus/apps/server
+EnvironmentFile=/opt/campus/.env
+Environment=NODE_ENV=production
+
+ExecStart=/usr/bin/node dist/main.js
+
+Restart=always
+RestartSec=5
+# 日志进 journald，用 journalctl -u campus 看
+StandardOutput=journal
+StandardError=journal
+
+# 基本加固：只允许写自己的目录
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/opt/campus/apps/server/uploads
+
+[Install]
+WantedBy=multi-user.target

@@ -28,6 +28,46 @@ export interface AiStats {
   trend: unknown[];
   mode: { provider: string; model: string; mock: boolean; embedding: string };
   embeddingEnabled: boolean;
+  /** 向量检索健康度：配了模型但调用失败时 failing=true（正在静默降级到关键词检索） */
+  embeddingHealth: {
+    enabled: boolean;
+    model: string | null;
+    failing: boolean;
+    lastError: string | null;
+    lastErrorAt: string | null;
+    hint: string | null;
+  };
+}
+
+export interface AiBudget {
+  budgetMicro: number;
+  spentMicro: number;
+  remainingMicro: number;
+  overBudget: boolean;
+  usedPercent: number;
+}
+
+export interface AiCost {
+  days: number;
+  totals: {
+    calls: number; costMicro: number; costText: string;
+    promptTokens: number; completionTokens: number;
+    avgLatencyMs: number; degradedCalls: number; degradedRate: number;
+    conversations: number; users: number; avgCostPerCallMicro: number;
+  };
+  budget: AiBudget;
+  byDay: { day: string; calls: number; costMicro: number; costText: string }[];
+  byModel: { model: string; calls: number; promptTokens: number; completionTokens: number; costMicro: number; costText: string }[];
+  byScene: { scene: string; calls: number; costMicro: number; costText: string }[];
+  byKind: { kind: string; calls: number; costMicro: number; costText: string }[];
+  topUsers: { userId: number | null; nickname: string; calls: number; costMicro: number; costText: string }[];
+  topConversations: { conversationId: number; calls: number; costMicro: number; costText: string }[];
+}
+
+export interface AiPriceRow {
+  match: string; label: string;
+  inputPerMillion: number; outputPerMillion: number;
+  currency: 'CNY' | 'USD'; note?: string;
 }
 
 export const api = {
@@ -37,6 +77,13 @@ export const api = {
   dashboard: () => get<DashboardData>('/admin/orders/dashboard'),
 
   aiStats: (days = 7) => get<AiStats>('/admin/ai/stats', { days }),
+
+  /** AI 成本看板：按天/模型/场景/用户聚合 + 预算状态 */
+  aiCost: (days = 7) => get<AiCost>('/admin/ai/cost', { days }),
+  aiPrices: () => get<{ version: string; usdToCny: number; items: AiPriceRow[] }>('/admin/ai/cost/prices'),
+  aiBudget: () => get<AiBudget>('/admin/ai/budget'),
+  /** 传元，后端换算成微元。0 = 不限额 */
+  aiSetBudget: (dailyBudgetYuan: number) => put<AiBudget>('/admin/ai/budget', { dailyBudgetYuan }),
 
   toolCalls: (params: ListParams, signal?: AbortSignal) => get<PageResult<Record<string, any>>>('/admin/ai/tool-calls', params, signal),
   conversations: (params: ListParams, signal?: AbortSignal) => get<PageResult<Record<string, any>>>('/admin/ai/conversations', params, signal),

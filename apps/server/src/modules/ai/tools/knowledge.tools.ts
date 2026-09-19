@@ -8,6 +8,48 @@ import { EmbeddingService } from '../embedding.service.js';
 import type { AiTool, ToolResult } from './tool.types.js';
 
 /** 从问句切检索词：中文按 2 字滑窗，英文数字按词 */
+/**
+ * 口语同义词表：用户怎么说 ↔ 知识库正文怎么写。
+ *
+ * 为什么需要：关键词检索是**字面匹配**，而中文口语和书面语经常一个字都对不上。
+ * 评测里 pol-16「满多少免运费」就是典型 —— 用户说「运费」，
+ * 知识库写的是「满 19 元免配送费」，5 个检索词一个都没命中，
+ * 结果模型回答「知识库里暂时没检索到免运费的条款」，而答案其实就在库里。
+ *
+ * 语义检索（配了 embedding 模型）自己能处理同义；但这张表在**零 Key 演示模式**下是唯一的指望，
+ * 因为那种模式根本没有向量检索。所以词表要小而准，不要贪多 —— 加错词会让检索跑偏。
+ */
+const SYNONYMS: Record<string, string[]> = {
+  // 物流
+  运费: ['配送费'],
+  邮费: ['配送费'],
+  免运: ['免配送费', '配送费'],
+  自取: ['自提'],
+  几天: ['时效', '30 分钟'],
+  多久: ['时效'],
+  // 售后
+  退货: ['退款'],
+  退还: ['退款'],
+  到帐: ['到账'],
+  钱: ['余额'],
+  // 二手书
+  新旧: ['成色'],
+  品相: ['成色'],
+  折旧: ['成色'],
+  // 优惠
+  打折: ['优惠券'],
+  满减: ['优惠券'],
+};
+
+/** 把检索词按同义词表扩展（去重，且不打乱原有顺序） */
+export function expandSynonyms(tokens: string[]): string[] {
+  const out = new Set(tokens);
+  for (const token of tokens) {
+    for (const extra of SYNONYMS[token] ?? []) out.add(extra);
+  }
+  return [...out];
+}
+
 export function tokenize(text: string): string[] {
   const cleaned = text.replace(/[^\u4e00-\u9fa5a-zA-Z0-9]+/g, ' ').trim();
   const tokens = new Set<string>();
@@ -56,7 +98,8 @@ export class KnowledgeTools {
 
         if (!rows.length) {
           mode = 'keyword';
-          const tokens = tokenize(query);
+          // 先按分词结果扩展同义词，再做字面匹配
+          const tokens = expandSynonyms(tokenize(query));
           const conditions = tokens.map((token) => {
             const like = '%' + token + '%';
             return or(sql`${aiKnowledge.title} ilike ${like}`, sql`${aiKnowledge.content} ilike ${like}`);

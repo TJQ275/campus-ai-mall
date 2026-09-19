@@ -47,6 +47,20 @@
       </el-col>
     </el-row>
 
+    <!-- 向量检索静默降级告警：不显式提示的话，检索质量退化了也没人会发现 -->
+    <el-alert
+      v-if="aiStats.embeddingHealth?.failing"
+      type="warning"
+      :closable="false"
+      show-icon
+      style="margin-top: 16px"
+      title="向量检索已失效，当前在用关键词兜底"
+    >
+      <div>模型：{{ aiStats.embeddingHealth.model }}</div>
+      <div>错误：{{ aiStats.embeddingHealth.lastError }}</div>
+      <div v-if="aiStats.embeddingHealth.hint" style="margin-top: 6px">建议：{{ aiStats.embeddingHealth.hint }}</div>
+    </el-alert>
+
     <el-card shadow="never" style="margin-top: 16px">
       <template #header>AI 工具调用分布</template>
       <el-table :data="aiStats.byTool" size="small" v-loading="loading">
@@ -81,7 +95,12 @@ const kpi = ref<Record<string, number>>({});
 const trend = ref<DashboardData['trend']>([]);
 const categorySales = ref<DashboardData['categorySales']>([]);
 const payChannels = ref<DashboardData['payChannels']>([]);
-const aiStats = ref<AiStats>({ byTool: [], totals: {}, trend: [], mode: { provider: '', model: '', mock: true, embedding: '' }, embeddingEnabled: false });
+const aiStats = ref<AiStats>({
+  byTool: [], totals: {}, trend: [],
+  mode: { provider: '', model: '', mock: true, embedding: '' },
+  embeddingEnabled: false,
+  embeddingHealth: { enabled: false, model: null, failing: false, lastError: null, lastErrorAt: null, hint: null },
+});
 const insight = ref<{ model: string; points: string[]; suggestion: string }>({ model: 'template', points: [], suggestion: '' });
 const loading = ref(false);
 const trendRef = ref<HTMLElement>();

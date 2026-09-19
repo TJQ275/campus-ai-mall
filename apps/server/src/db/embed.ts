@@ -3,6 +3,7 @@ import { createDb } from './client.js';
 import { LlmService } from '../modules/ai/llm.service.js';
 import { LlmConfigService } from '../modules/ai/llm-config.service.js';
 import { EmbeddingService } from '../modules/ai/embedding.service.js';
+import { AiUsageService } from '../modules/ai/usage.service.js';
 
 /**
  * 向量补全：pnpm ai:embed
@@ -14,7 +15,8 @@ async function main() {
   // 脚本里手动装配：配置来源与线上一致（后台设置页保存的库配置 > .env）
   const llm = new LlmService(new LlmConfigService(handle.db));
   await llm.init();
-  const embedding = new EmbeddingService(handle.db, llm);
+  // 脚本里也接上记账，这样 ai:embed 补向量花的钱同样进账本
+  const embedding = new EmbeddingService(handle.db, llm, new AiUsageService(handle.db));
 
   if (!embedding.enabled) {
     console.log('[embed] 未配置 LLM_EMBEDDING_MODEL，跳过。检索会自动使用关键词模式。');
