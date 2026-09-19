@@ -1,33 +1,45 @@
-# 生产 / 团队协作环境：一条命令起全套依赖
-# 本地个人开发无需 Docker —— 默认用 PGlite（WASM Postgres，零安装）
+# Docker 部署路径（已实测）。
+#
+# 本地个人开发其实不需要 Docker —— 有两条零依赖路径：
+#   1) PGlite（WASM Postgres，内置 pgvector）：.env 里 DB_DRIVER=pglite
+#   2) 本机原生 PostgreSQL + pgvector：DB_DRIVER=postgres（Windows 编译方法见 docs/06）
+#
+# 这个文件主要用于：交付给不懂技术的买家、在服务器上起临时演示环境。
+#
+# 用法：
+#   docker compose up -d postgres                      # 默认映射到本机 5432
+#   $env:POSTGRES_PORT='5433'; docker compose up -d postgres   # 本机 5432 已被原生 PostgreSQL 占用时
 services:
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16      # 官方镜像，已内置 pgvector，无需自己编译
     container_name: campus-postgres
     restart: unless-stopped
     environment:
-      POSTGRES_USER: campus
-      POSTGRES_PASSWORD: campus
-      POSTGRES_DB: campus_mall
+      POSTGRES_USER: ${POSTGRES_USER:-campus}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-campus}
+      POSTGRES_DB: ${POSTGRES_DB:-campus_mall}
     ports:
-      - '5432:5432'
+      # 左侧是宿主机端口。原生 PostgreSQL 已占用 5432 时用 POSTGRES_PORT 改成 5433
+      - '${POSTGRES_PORT:-5432}:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U campus -d campus_mall']
-      interval: 10s
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-campus} -d ${POSTGRES_DB:-campus_mall}']
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 10
 
-  redis:
-    image: redis:7-alpine
-    container_name: campus-redis
-    restart: unless-stopped
-    ports:
-      - '6379:6379'
-    volumes:
-      - redisdata:/data
+  # Redis 当前代码里完全没用到（没有任何 redis 客户端依赖），先注释掉避免误导买家。
+  # 以后要做限流、会话缓存、分布式锁时再打开，并把 REDIS_URL 接进代码。
+  # redis:
+  #   image: redis:7-alpine
+  #   container_name: campus-redis
+  #   restart: unless-stopped
+  #   ports:
+  #     - '6379:6379'
+  #   volumes:
+  #     - redisdata:/data
 
 volumes:
   pgdata:
-  redisdata:
+  # redisdata:

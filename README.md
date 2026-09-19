@@ -36,7 +36,7 @@ pnpm db:seed     # 灌入演示数据（零食 + 二手书 + 演示对话）
 pnpm dev:server  # http://localhost:3100/api/health
 ```
 
-## 切到真实 PostgreSQL
+## 切到真实 PostgreSQL（或 Docker）
 
 ```bash
 docker compose up -d postgres redis
@@ -45,6 +45,9 @@ pnpm db:push && pnpm db:seed
 ```
 
 同一份 Drizzle schema 同时驱动 PGlite 与 PostgreSQL，业务代码零改动。
+
+Docker 路径同样实测通过（`pgvector/pgvector:pg16` 镜像自带 pgvector）。**国内网络直连 Docker Hub 会超时**，需要先配镜像加速，见 `docs/06-部署与交付.md`。
+本机 5432 已被原生 PostgreSQL 占用时，用 `POSTGRES_PORT=5433` 换端口。
 
 ## 目录结构
 
