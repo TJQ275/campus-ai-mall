@@ -61,6 +61,19 @@
       <div v-if="aiStats.embeddingHealth.hint" style="margin-top: 6px">建议：{{ aiStats.embeddingHealth.hint }}</div>
     </el-alert>
 
+    <el-alert
+      v-if="aiStats.rerankHealth?.enabled && aiStats.rerankHealth?.failing"
+      type="warning"
+      :closable="false"
+      show-icon
+      style="margin-top: 16px"
+      title="重排服务不可达，已自动跳过重排"
+    >
+      <div>地址：{{ aiStats.rerankHealth.baseUrl }}</div>
+      <div>错误：{{ aiStats.rerankHealth.lastError }}</div>
+      <div v-if="aiStats.rerankHealth.hint" style="margin-top: 6px">建议：{{ aiStats.rerankHealth.hint }}</div>
+    </el-alert>
+
     <el-card shadow="never" style="margin-top: 16px">
       <template #header>AI 工具调用分布</template>
       <el-table :data="aiStats.byTool" size="small" v-loading="loading">
@@ -100,6 +113,7 @@ const aiStats = ref<AiStats>({
   mode: { provider: '', model: '', mock: true, embedding: '' },
   embeddingEnabled: false,
   embeddingHealth: { enabled: false, model: null, failing: false, lastError: null, lastErrorAt: null, hint: null },
+  rerankHealth: { enabled: false, baseUrl: null, failing: false, lastError: null, lastErrorAt: null, lastSuccessAt: null, hint: null },
 });
 const insight = ref<{ model: string; points: string[]; suggestion: string }>({ model: 'template', points: [], suggestion: '' });
 const loading = ref(false);

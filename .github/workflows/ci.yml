@@ -1,0 +1,90 @@
+# CI 门禁：push / PR 时跑静态检查、测试与 AI 评测。
+#
+# 关于 AI 评测这一环：
+#   评测需要真实大模型才有意义（走本地规则引擎的话分数天然很低）。
+#   所以在仓库 Secrets 里配 LLM_API_KEY 就会跑真实评测并启用「指标退步即失败」；
+#   没配则自动跳过评测步骤，其余检查照常。
+#
+#   故意不把评测设成「必须通过」才能合并：没有 Key 的 fork / 新克隆也应该能跑通 CI。
+
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: 安装依赖
+        run: pnpm install --frozen-lockfile
+
+      - name: 类型检查
+        run: pnpm typecheck
+
+      - name: 代码规范
+        run: pnpm lint
+
+      - name: 单元测试
+        run: pnpm --filter @campus/server test:unit
+
+      # 用 PGlite（WASM Postgres），CI 里不需要额外起数据库服务
+      - name: 准备演示数据库
+        env:
+          DB_DRIVER: pglite
+        run: pnpm --filter @campus/server db:push && pnpm --filter @campus/server db:seed
+
+      - name: 启动后端
+        env:
+          DB_DRIVER: pglite
+          JWT_SECRET: ci-only-secret-not-used-in-production
+        run: |
+          pnpm dev:server &
+          for i in $(seq 1 60); do
+            if curl -sf http://localhost:3100/api/health > /dev/null; then echo "后端就绪"; exit 0; fi
+            sleep 2
+          done
+          echo "后端启动超时"; exit 1
+
+      - name: 全链路验收
+        run: pnpm test:acceptance
+
+      - name: 并发与资金加固
+        run: pnpm test:hardening
+
+      - name: 小程序端测试
+        run: pnpm test:miniapp
+
+      # 只有配了 Key 才跑真实评测；评测脚本内部会在没有 Key 时走 Mock
+      - name: AI 评测（有 Key 时启用退步门禁）
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          LLM_BASE_URL: ${{ vars.LLM_BASE_URL || 'https://api.deepseek.com/v1' }}
+          LLM_MODEL: ${{ vars.LLM_MODEL || 'deepseek-chat' }}
+        run: |
+          if [ -z "$LLM_API_KEY" ]; then
+            echo "未配置 LLM_API_KEY，跳过 AI 评测（其余检查已通过）"
+            exit 0
+          fi
+          pnpm ai:eval -- --fail-on-regression --verbose
+
+      - name: 上传评测报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-report
+          path: apps/server/.eval/
+          if-no-files-found: ignore

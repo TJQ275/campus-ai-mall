@@ -36,6 +36,7 @@ export class AdminSettingsController {
     if (body.model !== undefined) patch.model = String(body.model).trim().slice(0, 100);
     if (body.visionModel !== undefined) patch.visionModel = String(body.visionModel).trim().slice(0, 100);
     if (body.embeddingModel !== undefined) patch.embeddingModel = String(body.embeddingModel).trim().slice(0, 100);
+    if (body.rerankBaseUrl !== undefined) patch.rerankBaseUrl = String(body.rerankBaseUrl).trim().slice(0, 300);
     if (body.timeoutMs !== undefined) {
       const timeout = Number(body.timeoutMs);
       if (Number.isFinite(timeout) && timeout >= 1000) patch.timeoutMs = Math.trunc(timeout);

@@ -25,6 +25,13 @@ apps/server/.eval/
 # 本机工具与诊断产物：内网穿透客户端（50MB+ 二进制）、隧道日志、连通性测试输出
 tools/
 
+# Python（重排服务）
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
 # 微信开发者工具
 apps/miniapp/dist/
 apps/miniapp/node_modules/

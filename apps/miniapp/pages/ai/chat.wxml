@@ -21,6 +21,9 @@
       <view wx:if="{{item.role === 'user'}}" class="bubble user">{{item.text}}</view>
 
       <view wx:else class="assistant-wrap">
+        <!-- 工作流阶段：让「理解→规划→执行→校验→回复」的过程对用户可见 -->
+        <view class="stage" wx:if="{{item.stage}}">{{item.stage}}</view>
+
         <view class="tools" wx:if="{{item.tools.length}}">
           <view class="tool-chip" wx:for="{{item.tools}}" wx:for-item="tool" wx:key="label">
             <text class="tool-dot {{tool.ok ? 'ok' : 'fail'}}"></text>

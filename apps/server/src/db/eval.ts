@@ -203,7 +203,8 @@ async function main() {
     baseline = null;
   }
 
-  printReport(results, summary, compareWithBaseline(summary, baseline), flag('verbose'));
+  const comparison = compareWithBaseline(summary, baseline);
+  printReport(results, summary, comparison, flag('verbose'));
 
   fs.mkdirSync(EVAL_DIR, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
@@ -216,8 +217,27 @@ async function main() {
     console.log('[eval] 已存为基线（作用域: ' + currentScope + '）: ' + BASELINE_FILE);
   }
 
-  // 有未通过用例时以非 0 退出，方便接进 CI 卡住退步
-  if (summary.passed < summary.total) process.exitCode = 1;
+  // ==================== CI 门禁 ====================
+  // 两种失败条件：
+  //   1. 有用例没通过（默认就卡）
+  //   2. 指标相对基线退步（要显式加 --fail-on-regression，因为基线本身也在演进）
+  const failures: string[] = [];
+  if (summary.passed < summary.total) {
+    failures.push('有 ' + (summary.total - summary.passed) + ' 条用例未通过: ' + summary.failedIds.join(', '));
+  }
+  if (flag('fail-on-regression') && comparison && comparison.regressions.length) {
+    failures.push('指标相对基线退步: ' + comparison.regressions.map((m) => m.label + ' ' + m.before + '→' + m.now).join(', '));
+  }
+
+  if (failures.length) {
+    console.log('');
+    console.log('[eval] ❌ 未达门禁:');
+    for (const f of failures) console.log('       - ' + f);
+    process.exitCode = 1;
+  } else {
+    console.log('');
+    console.log('[eval] ✅ 通过门禁（' + summary.passed + '/' + summary.total + '）');
+  }
 }
 
 main().catch((error) => {

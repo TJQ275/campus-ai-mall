@@ -30,7 +30,10 @@
     "demo:prepare": "pnpm --filter @campus/server demo:prepare",
     "setup": "pnpm db:push && pnpm db:seed && pnpm demo:prepare",
     "dev": "pwsh -File scripts/dev.ps1",
-    "ai:eval": "pnpm --filter @campus/server ai:eval"
+    "ai:eval": "pnpm --filter @campus/server ai:eval",
+    "ci": "pwsh -File scripts/ci.ps1",
+    "rerank": "pwsh -File services/rerank/run.ps1",
+    "test:py": "cd services/rerank && python -m pytest -q"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

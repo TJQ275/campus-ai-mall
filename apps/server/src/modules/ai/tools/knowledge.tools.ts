@@ -5,6 +5,12 @@ import { DB } from '../../database/database.module.js';
 import type { Db } from '../../../db/client.js';
 import { aiKnowledge } from '../../../db/schema/index.js';
 import { EmbeddingService } from '../embedding.service.js';
+import { RerankService } from '../rerank.service.js';
+
+/** 召回条数：放宽一点，让重排有得选 */
+const RECALL_LIMIT = 20;
+/** 最终喂给模型的条数：太多会稀释注意力，也会撑大 prompt */
+const FINAL_LIMIT = 4;
 import type { AiTool, ToolResult } from './tool.types.js';
 
 /** 从问句切检索词：中文按 2 字滑窗，英文数字按词 */
@@ -75,6 +81,7 @@ export class KnowledgeTools {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly embedding: EmbeddingService,
+    private readonly rerank: RerankService,
   ) {}
 
   all(): AiTool[] {
@@ -92,9 +99,11 @@ export class KnowledgeTools {
       }),
       run: async (_ctx, args): Promise<ToolResult> => {
         const query = String(args.query ?? '');
-        const vectorRows = await this.embedding.searchKnowledgeByVector(query, 4);
+        // 先【广召回】再【重排】：直接召回 4 条就交给模型，最相关的那条可能排在第 7 位，
+        // 根本没进候选。所以这里把召回放宽到 20 条，再由重排服务精选出 4 条。
+        const vectorRows = await this.embedding.searchKnowledgeByVector(query, RECALL_LIMIT);
         let rows: { id: number; title: string; source: string | null; content: string; score?: number }[] = vectorRows ?? [];
-        let mode: 'vector' | 'keyword' = 'vector';
+        let mode = 'vector';
 
         if (!rows.length) {
           mode = 'keyword';
@@ -124,7 +133,28 @@ export class KnowledgeTools {
             })
             .filter((r) => r.score > 0)
             .sort((a, b) => b.score - a.score)
-            .slice(0, 4);
+            // 关键词路径也保留完整召回集，交给同一套重排逻辑精选
+            .slice(0, RECALL_LIMIT);
+        }
+
+        // 重排：把 20 条候选重新排序取前 4。服务不可用时返回 null，此时沿用召回顺序，
+        // 并在 brief 里体现出来 —— 检索质量降级了，模型和日志都该看得见。
+        if (rows.length > FINAL_LIMIT) {
+          const reranked = await this.rerank.rerank(
+            query,
+            rows.map((r) => ({ id: String(r.id), text: r.title + ' ' + r.content, score: r.score })),
+            FINAL_LIMIT,
+          );
+          if (reranked) {
+            const byId = new Map(rows.map((r) => [String(r.id), r]));
+            const picked = reranked.map((x) => byId.get(x.id)).filter((r): r is (typeof rows)[number] => Boolean(r));
+            if (picked.length) {
+              rows = picked;
+              mode = mode + '+rerank';
+            }
+          } else {
+            rows = rows.slice(0, FINAL_LIMIT);
+          }
         }
 
         if (!rows.length) {

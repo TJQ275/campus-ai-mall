@@ -6,6 +6,7 @@ import {
   aiConversations, aiKnowledge, aiMessages, aiPendingActions, aiToolCalls, users,
 } from '../../db/schema/index.js';
 import { EmbeddingService } from '../ai/embedding.service.js';
+import { RerankService } from '../ai/rerank.service.js';
 import { CopywritingService } from '../ai/copywriting.service.js';
 import { LlmService } from '../ai/llm.service.js';
 
@@ -15,6 +16,7 @@ export class AdminAiService {
   constructor(
     @Inject(DB) private readonly db: Db,
     private readonly embedding: EmbeddingService,
+    private readonly rerank: RerankService,
     private readonly copywritingService: CopywritingService,
     private readonly llm: LlmService,
   ) {}
@@ -23,6 +25,7 @@ export class AdminAiService {
   async stats(days = 7) {
     // 向量检索的健康状况：失败是静默降级，必须显式暴露出来
     const embeddingHealth = this.embedding.health();
+    const rerankHealth = this.rerank.health();
     const since = new Date(Date.now() - days * 86400000);
     const byTool = await this.db.execute(sql`
       select tool_name,
@@ -70,6 +73,8 @@ export class AdminAiService {
       embeddingEnabled: this.embedding.enabled,
       // 向量检索是否正在「静默降级」—— 配了模型但调用失败时会带上原因和修复建议
       embeddingHealth,
+      // 重排服务同理：挂了会自动跳过重排，检索仍可用但排序质量下降
+      rerankHealth,
     };
   }
 

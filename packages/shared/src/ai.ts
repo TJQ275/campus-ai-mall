@@ -9,8 +9,12 @@ export type AiEventType =
   | 'cards'
   | 'action_confirm'
   | 'usage'
+  | 'stage'
   | 'error'
   | 'done';
+
+/** Agent 工作流阶段（与后端 workflow.ts 保持一致） */
+export type AiWorkflowStage = 'understand' | 'plan' | 'act' | 'verify' | 'respond';
 
 export interface AiProductCard {
   id: number;
@@ -40,6 +44,11 @@ export type AiEvent =
       degraded: boolean;
       latencyMs: number;
     }
+  /**
+   * 工作流阶段事件：理解意图 → 规划步骤 → 执行工具 → 校验回答 → 生成回复。
+   * 前端可以把它渲染成一条进度轨迹，出问题时也能一眼看出卡在哪一步。
+   */
+  | { type: 'stage'; stage: AiWorkflowStage; label: string; status: 'start' | 'done'; brief?: string }
   | { type: 'error'; message: string }
   | { type: 'done'; conversationId: number; messageId: number | null };
 

@@ -5,9 +5,15 @@ import { DB } from '../../database/database.module.js';
 import type { Db } from '../../../db/client.js';
 import { userProfiles } from '../../../db/schema/index.js';
 import { eq } from 'drizzle-orm';
+import { RerankService } from '../rerank.service.js';
 import type { AiTool, ToolResult } from './tool.types.js';
 
 const yuan = (cents: number) => '¥' + (cents / 100).toFixed(2);
+
+/** 相关性检索时的过采样倍数：先多取一些，重排后再收敛到用户要的条数 */
+const OVERSAMPLE = 3;
+/** 过采样的下限，保证候选足够重排去挑 */
+const MIN_CANDIDATES = 15;
 
 /** 导购相关的工具：搜商品、看详情、读画像 */
 @Injectable()
@@ -15,6 +21,7 @@ export class CatalogTools {
   constructor(
     private readonly catalog: CatalogService,
     @Inject(DB) private readonly db: Db,
+    private readonly rerank: RerankService,
   ) {}
 
   all(): AiTool[] {
@@ -35,30 +42,72 @@ export class CatalogTools {
         tags: z.array(z.string()).optional().describe('标签，如 辣 / 甜 / 宿舍必备 / 考研 / 有笔记'),
         condition: z.enum(['new', 'like_new', 'good', 'fair']).optional().describe('二手书成色'),
         course: z.string().optional().describe('适用课程，如 高等数学 / 数据结构'),
-        sort: z.enum(['default', 'sales', 'price_asc', 'price_desc', 'newest']).optional(),
+        // 这条描述很关键：模型原先会自作主张传 sort='sales'，
+        // 而显式排序会关闭相关性重排（不能拿词法分覆盖用户要的排序），
+        // 结果「推荐几本教材」这种纯相关性请求反而没走重排。
+        // 所以必须明确告诉模型：**只有用户明确要求排序时才传**。
+        sort: z
+          .enum(['default', 'sales', 'price_asc', 'price_desc', 'newest'])
+          .optional()
+          .describe('排序方式。只有用户明确说「按价格排」「销量最高」「最新」时才传；其余情况一律不传，走相关性排序'),
         pageSize: z.number().int().min(1).max(10).optional().describe('返回数量，默认 5'),
       }),
       run: async (_ctx, args): Promise<ToolResult> => {
+        const keyword = args.keyword as string | undefined;
+        const sort = (args.sort as string) ?? 'default';
+        const wanted = (args.pageSize as number) ?? 5;
+
+        // 相关性信号不止 keyword 一个：模型经常改用 tags / course 来筛
+        // （实测问「教材有哪些」它传的是 tags=['教材']，只认 keyword 会让重排永远不触发）。
+        // 把这些词拼成重排用的查询串。
+        const relevanceTerms = [keyword, ...((args.tags as string[]) ?? []), args.course as string]
+          .filter((x): x is string => typeof x === 'string' && x.trim().length > 0);
+        const relevanceQuery = relevanceTerms.join(' ');
+
+        // 只在「相关性检索」时重排：用户明确按价格/销量排序时必须尊重他的选择，
+        // 拿词法分去覆盖一次显式的 price_asc 是错的（用户会看到价格乱序）。
+        const byRelevance = relevanceTerms.length > 0 && sort === 'default';
+        const fetchSize = byRelevance ? Math.min(50, Math.max(wanted * OVERSAMPLE, MIN_CANDIDATES)) : wanted;
+
         const result = await this.catalog.search({
-          keyword: args.keyword as string | undefined,
+          keyword,
           kind: args.kind as 'snack' | 'book' | undefined,
           priceMin: args.priceMin as number | undefined,
           priceMax: args.priceMax as number | undefined,
           tags: args.tags as string[] | undefined,
           condition: args.condition as never,
           course: args.course as string | undefined,
-          sort: (args.sort as never) ?? 'default',
-          pageSize: (args.pageSize as number) ?? 5,
+          sort: sort as never,
+          pageSize: fetchSize,
         });
+
+        // 过采样后重排收敛。重排挂了就用原顺序截断，不影响可用性。
+        let list = result.list;
+        let rerankedFlag = false;
+        if (byRelevance && list.length > wanted) {
+          const reranked = await this.rerank.rerank(
+            relevanceQuery,
+            list.map((p) => ({ id: String(p.id), text: [p.title, p.subtitle ?? '', (p.tags ?? []).join(' ')].join(' ') })),
+            wanted,
+          );
+          if (reranked) {
+            const byId = new Map(list.map((p) => [String(p.id), p]));
+            const picked = reranked.map((x) => byId.get(x.id)).filter((p): p is (typeof list)[number] => Boolean(p));
+            if (picked.length) { list = picked; rerankedFlag = true; }
+          }
+          if (!rerankedFlag) list = list.slice(0, wanted);
+        }
+        result.list = list;
+
         const brief = result.total
-          ? '找到 ' + result.total + ' 件商品，展示前 ' + result.list.length + ' 件'
+          ? '找到 ' + result.total + ' 件商品，展示前 ' + list.length + ' 件' + (rerankedFlag ? '（已按相关性重排）' : '')
           : '没有符合条件的商品';
         return {
           brief,
-          cards: result.list,
+          cards: list,
           data: {
             total: result.total,
-            items: result.list.map((p) => ({
+            items: list.map((p) => ({
               productId: p.id, title: p.title, price: yuan(p.priceCents), priceCents: p.priceCents,
               kind: p.kind, tags: p.tags, stock: p.stock, sales: p.sales,
             })),

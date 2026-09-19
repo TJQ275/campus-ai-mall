@@ -19,6 +19,8 @@ export interface LlmRuntimeConfig {
   embeddingModel: string;
   embeddingDim: number;
   timeoutMs: number;
+  /** 重排服务地址（Python 微服务）。留空 = 不重排，召回顺序直出 */
+  rerankBaseUrl: string;
 }
 
 /** 数据库里的键名 → 配置字段。前缀统一，方便一次性读出来 */
@@ -30,6 +32,7 @@ const DB_KEYS: Record<keyof LlmRuntimeConfig, string> = {
   embeddingModel: 'llm.embedding_model',
   embeddingDim: 'llm.embedding_dim',
   timeoutMs: 'llm.timeout_ms',
+  rerankBaseUrl: 'rerank.base_url',
 };
 
 const DEFAULTS: LlmRuntimeConfig = {
@@ -40,6 +43,7 @@ const DEFAULTS: LlmRuntimeConfig = {
   embeddingModel: '',
   embeddingDim: 1024,
   timeoutMs: 60000,
+  rerankBaseUrl: '',
 };
 
 const fromEnv = (): LlmRuntimeConfig => ({
@@ -50,6 +54,7 @@ const fromEnv = (): LlmRuntimeConfig => ({
   embeddingModel: process.env.LLM_EMBEDDING_MODEL?.trim() || '',
   embeddingDim: Number(process.env.LLM_EMBEDDING_DIM ?? DEFAULTS.embeddingDim) || DEFAULTS.embeddingDim,
   timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? DEFAULTS.timeoutMs) || DEFAULTS.timeoutMs,
+  rerankBaseUrl: process.env.RERANK_BASE_URL?.trim() || '',
 });
 
 @Injectable()
@@ -97,7 +102,7 @@ export class LlmConfigService {
   /** 用于判断 provider 是否需要重建：配置变了就换实例 */
   get signature(): string {
     const c = this.snapshot;
-    return [c.baseUrl, c.apiKey, c.model, c.visionModel, c.embeddingModel, c.embeddingDim, c.timeoutMs].join('|');
+    return [c.baseUrl, c.apiKey, c.model, c.visionModel, c.embeddingModel, c.embeddingDim, c.timeoutMs, c.rerankBaseUrl].join('|');
   }
 
   isOverridden(field: keyof LlmRuntimeConfig): boolean {
@@ -138,6 +143,7 @@ export class LlmConfigService {
       embeddingModel: c.embeddingModel,
       embeddingDim: c.embeddingDim,
       timeoutMs: c.timeoutMs,
+      rerankBaseUrl: c.rerankBaseUrl,
       apiKeyConfigured: Boolean(c.apiKey),
       apiKeyMasked: c.apiKey ? c.apiKey.slice(0, 4) + '****' + c.apiKey.slice(-4) : '',
       overridden: Object.fromEntries(

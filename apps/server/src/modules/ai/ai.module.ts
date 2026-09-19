@@ -17,6 +17,7 @@ import { MerchantTools } from './tools/merchant.tools.js';
 import { CopywritingService } from './copywriting.service.js';
 import { EmbeddingService } from './embedding.service.js';
 import { AiUsageService } from './usage.service.js';
+import { RerankService } from './rerank.service.js';
 
 @Module({
   imports: [CatalogModule, CartModule, OrderModule, AfterSaleModule],
@@ -35,7 +36,8 @@ import { AiUsageService } from './usage.service.js';
     MerchantTools,
     CopywritingService,
     AiUsageService,
+    RerankService,
   ],
-  exports: [AiService, AgentService, LlmService, EmbeddingService, CopywritingService, ToolRegistry, LlmConfigService, AiUsageService],
+  exports: [AiService, AgentService, LlmService, EmbeddingService, CopywritingService, ToolRegistry, LlmConfigService, AiUsageService, RerankService],
 })
 export class AiModule {}

@@ -212,6 +212,9 @@ Page({
         });
       }
       patch[base + '.tools'] = tools;
+    } else if (name === 'stage') {
+      // start 显示「校验回答…」，done 就清掉（后续阶段会覆盖）
+      patch[base + '.stage'] = payload.status === 'start' ? payload.label + '…' : '';
     } else if (name === 'cards') {
       patch[base + '.cards'] = (current.cards || []).concat((payload.products || []).map(decorateProduct));
     } else if (name === 'action_confirm') {

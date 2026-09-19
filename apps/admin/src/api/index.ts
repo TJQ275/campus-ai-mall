@@ -37,6 +37,16 @@ export interface AiStats {
     lastErrorAt: string | null;
     hint: string | null;
   };
+  /** 重排服务健康度：挂了会自动跳过重排，检索仍可用但排序质量下降 */
+  rerankHealth: {
+    enabled: boolean;
+    baseUrl: string | null;
+    failing: boolean;
+    lastError: string | null;
+    lastErrorAt: string | null;
+    lastSuccessAt: string | null;
+    hint: string | null;
+  };
 }
 
 export interface AiBudget {

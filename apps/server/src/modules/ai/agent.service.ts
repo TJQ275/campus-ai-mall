@@ -9,6 +9,13 @@ import { buildHistoryMessages } from './history.js';
 import type { AiContext } from './tools/tool.types.js';
 import type { ChatMessage, ChatResult, LlmProvider, LlmToolCall, ToolSpec } from './provider/types.js';
 import type { ProductCard } from '../catalog/catalog.service.js';
+import {
+  STAGE_LABEL,
+  verifyAnswer,
+  hasBlockingIssue,
+  buildCorrectionPrompt,
+  type VerifyIssue,
+} from './workflow.js';
 
 // 实测 4 轮不够：模型遇到「把X加到购物车」会先查画像 → 再检索两次 → 再看详情，
 // 4 轮被检索吃光，真正的 add_to_cart 根本没机会调用，收尾时还会谎称已完成。
@@ -74,7 +81,24 @@ export class AgentService {
       attachments: input.imageUrls ?? [],
     });
 
+    let degraded = this.llm.current.isMock;
+
+    // 日预算闸门放在最前面：先确定这一轮能不能用收费模型，再谈规划。
+    // 今天花的钱超过预算就整轮降级到本地 Mock，避免账单失控 ——
+    // 用户拿到的回复依旧完整可用（规则 + 协同过滤），只是不再调用收费模型。
+    const budget = await this.usage.budgetStatus();
+    const overBudget = budget.overBudget && !this.llm.current.isMock;
+    if (overBudget) {
+      degraded = true;
+      this.logger.warn('今日 AI 预算已用完（已花 ' + budget.spentMicro + ' 微元 / 预算 ' + budget.budgetMicro + '），本轮降级为本地模式');
+    }
+
     const specs = this.registry.specs(ctx.scene);
+    yield { type: 'stage', stage: 'understand', label: STAGE_LABEL.understand, status: 'done', brief: ctx.scene + ' 场景' };
+    yield {
+      type: 'stage', stage: 'plan', label: STAGE_LABEL.plan, status: 'done',
+      brief: '可用工具 ' + specs.length + ' 个' + (overBudget ? '（预算已用尽，走本地模式）' : ''),
+    };
     const system = buildSystemPrompt(ctx, user, specs.map((s) => s.name));
     const history = await this.ai.history(conversation.id, 16);
     const messages: ChatMessage[] = [
@@ -88,17 +112,16 @@ export class AgentService {
     // 4 轮上限被烧光，用户拿到的是「工具调用次数已达上限」而不是答案。
     // 重复调用直接不执行，改成回灌一条提示让模型基于已有结果作答。
     const calledFingerprints = new Set<string>();
-    let degraded = this.llm.current.isMock;
+    // 工作流校验阶段需要的观测数据：调了哪些工具、哪些是写操作、有没有待确认动作、
+    // 以及所有工具结果的原文（用来核对答案里的金额有没有出处）。
+    const trace = {
+      toolsCalled: [] as string[],
+      writeToolsCalled: [] as string[],
+      toolContextParts: [] as string[],
+      pendingActionCount: 0,
+      actStageEmitted: false,
+    };
     let finalMessageId: number | null = null;
-
-    // 日预算闸门：今天花的钱超过预算就整轮降级到本地 Mock，避免账单失控。
-    // 用户拿到的回复依旧完整可用（规则 + 协同过滤），只是不再调用收费模型。
-    const budget = await this.usage.budgetStatus();
-    const overBudget = budget.overBudget && !this.llm.current.isMock;
-    if (overBudget) {
-      degraded = true;
-      this.logger.warn('今日 AI 预算已用完（已花 ' + budget.spentMicro + ' 微元 / 预算 ' + budget.budgetMicro + '），本轮降级为本地模式');
-    }
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
       // 客户端已经断开：立刻停止，不再发起新的模型调用
@@ -162,13 +185,46 @@ export class AgentService {
         degraded: result.degraded,
       });
 
-      // 没有工具调用 → 这就是最终回复
+      // 没有工具调用 → 这就是最终回复。但**不能直接发**，先过校验阶段。
       if (!result.toolCalls.length) {
+        const draft = result.content || content;
+        yield { type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'start' };
+
+        const verified = await this.verifyAndCorrect({
+          userId, conversationId: conversation.id, scene: ctx.scene,
+          userMessage: input.message, draft, trace, overBudget,
+          // 带纠正指令重写一次。重写同样是一次模型调用，所以也记账。
+          regenerate: async (correctionPrompt) => {
+            const retry = await provider.chat(
+              [...messages, { role: 'assistant', content: draft }, { role: 'user', content: correctionPrompt }],
+              [], signal,
+            );
+            await this.usage.record({
+              userId, conversationId: conversation.id, scene: ctx.scene,
+              model: retry.model, kind: 'chat',
+              promptTokens: retry.usage.promptTokens, completionTokens: retry.usage.completionTokens,
+              latencyMs: Date.now() - started, degraded: retry.degraded,
+            });
+            return retry.content ?? '';
+          },
+        });
+
+        const blocking = verified.issues.filter((x) => x.severity === 'block');
+        const warning = verified.issues.filter((x) => x.severity === 'warn');
+        if (warning.length) this.logger.warn('回答校验告警: ' + warning.map((x) => x.rule + ' ' + x.detail).join(' | '));
+        yield {
+          type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'done',
+          brief: blocking.length
+            ? '发现 ' + blocking.length + ' 个问题' + (verified.corrected ? '，已修正' : '')
+            : '通过' + (warning.length ? '（' + warning.length + ' 条告警）' : ''),
+        };
+
+        yield { type: 'stage', stage: 'respond', label: STAGE_LABEL.respond, status: 'start' };
         const saved = await this.ai.appendMessage({
           conversationId: conversation.id,
           userId,
           role: 'assistant',
-          content: result.content || content,
+          content: verified.text,
           cards,
           model: result.model,
           promptTokens: result.usage.promptTokens,
@@ -177,6 +233,7 @@ export class AgentService {
           degraded,
         });
         finalMessageId = saved.id;
+        if (verified.corrected) yield { type: 'text', delta: verified.text };
         yield {
           type: 'usage',
           promptTokens: result.usage.promptTokens,
@@ -223,7 +280,11 @@ export class AgentService {
           continue;
         }
         calledFingerprints.add(fingerprint);
-        yield* this.executeTool(ctx, call, { conversationId: conversation.id, assistantMessageId: assistantTurn.id, cards, messages });
+        if (!trace.actStageEmitted) {
+          trace.actStageEmitted = true;
+          yield { type: 'stage', stage: 'act', label: STAGE_LABEL.act, status: 'start' };
+        }
+        yield* this.executeTool(ctx, call, { conversationId: conversation.id, assistantMessageId: assistantTurn.id, cards, messages, trace });
       }
     }
 
@@ -250,12 +311,38 @@ export class AgentService {
     }
 
     if (forcedText) {
+      // 收尾作答同样要过校验 —— 这正是当初出问题的地方：
+      // 轮次耗尽后没有工具可用，模型就编了一句「已加入购物车」。
+      yield { type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'start' };
+      const verified = await this.verifyAndCorrect({
+        userId, conversationId: conversation.id, scene: ctx.scene,
+        userMessage: input.message, draft: forcedText, trace, overBudget,
+        regenerate: async (correctionPrompt) => {
+          const retry = await lastProvider.chat(
+            [...messages, { role: 'assistant', content: forcedText }, { role: 'user', content: correctionPrompt }],
+            [], signal,
+          );
+          await this.usage.record({
+            userId, conversationId: conversation.id, scene: ctx.scene,
+            model: retry.model, kind: 'chat',
+            promptTokens: retry.usage.promptTokens, completionTokens: retry.usage.completionTokens,
+            latencyMs: Date.now() - started, degraded: retry.degraded,
+          });
+          return retry.content ?? '';
+        },
+      });
+      const blocking = verified.issues.filter((x) => x.severity === 'block');
+      yield {
+        type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'done',
+        brief: blocking.length ? '发现 ' + blocking.length + ' 个问题，已修正' : '通过',
+      };
+
       const saved = await this.ai.appendMessage({
         conversationId: conversation.id, userId, role: 'assistant',
-        content: forcedText, cards, model: lastProvider.model,
+        content: verified.text, cards, model: lastProvider.model,
         latencyMs: Date.now() - started, degraded,
       });
-      yield { type: 'text', delta: forcedText };
+      yield { type: 'text', delta: verified.text };
       yield { type: 'done', conversationId: conversation.id, messageId: saved.id };
       return;
     }
@@ -264,11 +351,79 @@ export class AgentService {
     yield { type: 'done', conversationId: conversation.id, messageId: finalMessageId };
   }
 
+  /**
+   * 工作流的「校验」阶段：把草稿答案过一遍规则，不通过就带着纠正指令重写一次。
+   *
+   * 为什么必须有这一步：模型会**声称做过某件事**而实际没做。
+   * 评测实测过：用户说「把辣条加到购物车」，模型回答「已加入购物车」，
+   * 而工具链里根本没有 add_to_cart —— 用户会以为购物车里真有东西。
+   * 这类错误必须在发给用户之前拦掉，光靠提示词约束不住。
+   *
+   * 重写后仍然不通过时，返回一句**诚实的兜底说明**，
+   * 而不是把那个假的成功确认发出去 —— 宁可让用户觉得「没办成」，
+   * 也不能让他以为「办成了」。
+   */
+  private async verifyAndCorrect(args: {
+    userId: number;
+    conversationId: number;
+    scene: string;
+    userMessage: string;
+    draft: string;
+    trace: { toolsCalled: string[]; writeToolsCalled: string[]; toolContextParts: string[]; pendingActionCount: number };
+    overBudget: boolean;
+    regenerate: (correctionPrompt: string) => Promise<string>;
+  }): Promise<{ text: string; issues: VerifyIssue[]; corrected: boolean }> {
+    const check = (answer: string) =>
+      verifyAnswer({
+        userMessage: args.userMessage,
+        answer,
+        scene: args.scene,
+        toolsCalled: args.trace.toolsCalled,
+        writeToolsCalled: args.trace.writeToolsCalled,
+        pendingActionCount: args.trace.pendingActionCount,
+        toolContext: args.trace.toolContextParts.join('\n'),
+      });
+
+    const issues = check(args.draft);
+    if (!hasBlockingIssue(issues)) return { text: args.draft, issues, corrected: false };
+
+    const blocking = issues.filter((i) => i.severity === 'block');
+    this.logger.warn('回答未通过校验，触发重写: ' + blocking.map((i) => i.rule).join(', '));
+
+    try {
+      const rewritten = (await args.regenerate(buildCorrectionPrompt(blocking))).trim();
+      if (rewritten) {
+        const recheck = check(rewritten);
+        if (!hasBlockingIssue(recheck)) {
+          return { text: rewritten, issues: [...issues, ...recheck], corrected: true };
+        }
+        this.logger.warn('重写后仍有阻断问题: ' + recheck.filter((i) => i.severity === 'block').map((i) => i.rule).join(', '));
+      }
+    } catch (error) {
+      this.logger.warn('重写失败: ' + (error as Error).message);
+    }
+
+    // 兜底：不把假的成功确认发给用户
+    this.logger.error('校验未通过且重写无效，返回兜底说明: ' + blocking.map((i) => i.rule).join(', '));
+    return {
+      text: '这件事我这边还没能完成，麻烦你再说一次，或者在界面上点一下确认按钮。',
+      issues,
+      corrected: true,
+    };
+  }
+
   /** 单个工具的执行 / 挂起（写操作）分支 */
   private async *executeTool(
     ctx: AiContext,
     call: LlmToolCall,
-    io: { conversationId: number; assistantMessageId: number; cards: ProductCard[]; messages: ChatMessage[] },
+    io: {
+      conversationId: number;
+      assistantMessageId: number;
+      cards: ProductCard[];
+      messages: ChatMessage[];
+      /** 工作流观测数据，供校验阶段使用 */
+      trace: { toolsCalled: string[]; writeToolsCalled: string[]; toolContextParts: string[]; pendingActionCount: number; actStageEmitted: boolean };
+    },
   ): AsyncGenerator<AiEvent, void, unknown> {
     const tool = this.registry.get(call.name);
     if (!tool) {
@@ -277,6 +432,8 @@ export class AgentService {
     }
 
     yield { type: 'tool_start', toolName: tool.name, label: tool.label };
+    io.trace.toolsCalled.push(tool.name);
+    if (tool.write) io.trace.writeToolsCalled.push(tool.name);
 
     // 写操作：不执行，落 pending 等用户确认
     if (tool.write) {
@@ -297,6 +454,8 @@ export class AgentService {
         result: { actionId: action.id, summary },
         status: 'pending',
       });
+      io.trace.pendingActionCount += 1;
+      io.trace.toolContextParts.push(tool.name + ' ' + summary);
       yield { type: 'tool_result', toolName: tool.name, ok: true, brief: '等待你确认：' + summary };
       yield { type: 'action_confirm', actionId: action.id, actionType: tool.name, summary };
       io.messages.push({
@@ -317,6 +476,8 @@ export class AgentService {
     try {
       const outcome = await tool.run(ctx, call.arguments);
       const durationMs = Date.now() - startedAt;
+      // 结果原文进 trace：校验阶段要拿它核对答案里的金额有没有出处
+      io.trace.toolContextParts.push(tool.name + ' ' + (outcome.brief ?? '') + ' ' + JSON.stringify(outcome.data ?? {}));
       if (outcome.cards?.length) {
         io.cards.push(...outcome.cards);
         yield { type: 'cards', products: outcome.cards.map((c) => ({ ...c })) };

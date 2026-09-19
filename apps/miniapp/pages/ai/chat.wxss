@@ -21,6 +21,8 @@
 .typing { color: #969799; }
 .assistant-wrap { margin-right: 60rpx; }
 .tools { margin-bottom: 10rpx; }
+/* 当前工作流阶段。刻意做得比工具链更淡 —— 它是过程提示，不该抢内容的注意力 */
+.stage { font-size: 22rpx; color: #969799; margin-bottom: 8rpx; padding-left: 4rpx; }
 .tool-chip {
   display: flex; align-items: center; background: #fff7e6; color: #b88230;
   border-radius: 10rpx; padding: 10rpx 18rpx; font-size: 24rpx; margin-bottom: 8rpx;
