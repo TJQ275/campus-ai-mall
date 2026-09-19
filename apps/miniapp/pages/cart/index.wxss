@@ -14,4 +14,15 @@
   align-items: center; justify-content: space-between; padding: 16rpx 24rpx;
   box-shadow: 0 -2rpx 12rpx rgba(0,0,0,.06);
 }
-.settle { width: 240rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; }
+.total {
+  font-size: 28rpx;
+  margin-right: 12rpx;
+}
+
+.settle {
+  width: 220rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 28rpx;
+  padding: 0;
+}

@@ -24,7 +24,7 @@
 
   <view class="empty" wx:if="{{!list.length}}">
     <view>购物车还是空的</view>
-    <button class="btn-primary mt-24" bindtap="goShopping">去逛逛</button>
+    <button class="btn-primary btn-block mt-24" bindtap="goShopping">去逛逛</button>
   </view>
 
   <view class="h-140"></view>

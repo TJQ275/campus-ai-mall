@@ -22,6 +22,6 @@
     </view>
   </view>
   <view class="pd-24">
-    <button class="btn-primary" bindtap="save">保存</button>
+    <button class="btn-primary btn-block" bindtap="save">保存</button>
   </view>
 </view>

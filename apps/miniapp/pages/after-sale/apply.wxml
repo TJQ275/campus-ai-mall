@@ -23,6 +23,6 @@
   </view>
 
   <view class="pd-24">
-    <button class="btn-primary" disabled="{{submitting}}" bindtap="submit">提交申请</button>
+    <button class="btn-primary btn-block" disabled="{{submitting}}" bindtap="submit">提交申请</button>
   </view>
 </view>

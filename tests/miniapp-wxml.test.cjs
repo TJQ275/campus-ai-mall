@@ -89,7 +89,40 @@ for (const wxml of wxmlFiles) {
   }
 }
 
-// 5) app.json 里注册的页面文件是否齐全
+// 5) WXML 用到的 class 必须在 wxss 里有定义（防止类名写错导致「样式没生效」）
+const appWxss = fs.readFileSync(path.join(ROOT, 'app.wxss'), 'utf8');
+for (const wxml of wxmlFiles) {
+  const rel = path.relative(ROOT, wxml).split(path.sep).join('/');
+  const source = fs.readFileSync(wxml, 'utf8');
+  const pageWxssPath = wxml.replace(/\.wxml$/, '.wxss');
+  const css = (fs.existsSync(pageWxssPath) ? fs.readFileSync(pageWxssPath, 'utf8') : '') + '\n' + appWxss;
+  const defined = new Set([...css.matchAll(/\.([a-zA-Z][\w-]*)/g)].map((m) => m[1]));
+
+  const used = new Set();
+  for (const m of source.matchAll(/class\s*=\s*"([^"]*)"/g)) {
+    const raw = m[1];
+    // {{ }} 整体去掉；只有三元表达式 ? / : 后面的字面量才是 class 名，
+    // 比较用的值（scene === 'shopping'）不是，不能算进来
+    const literals = [];
+    for (const expr of raw.match(/\{\{[^}]*\}\}/g) || []) {
+      for (const m of expr.matchAll(/[?:]\s*'([^']*)'|[?:]\s*"([^"]*)"/g)) {
+        const value = m[1] !== undefined ? m[1] : m[2];
+        if (value) literals.push(value);
+      }
+    }
+    const chunks = [raw.replace(/\{\{[^}]*\}\}/g, ' ')].concat(literals);
+    for (const chunk of chunks) {
+      for (const token of chunk.split(/\s+/)) {
+        if (/^[a-zA-Z][\w-]*$/.test(token)) used.add(token);
+      }
+    }
+  }
+  for (const cls of used) {
+    if (!defined.has(cls)) problems.push(rel + '：class="' + cls + '" 在 wxss 里没有定义（样式不会生效）');
+  }
+}
+
+// 6) app.json 里注册的页面文件是否齐全
 for (const page of appJson.pages) {
   for (const ext of ['.js', '.json', '.wxml']) {
     const f = path.join(ROOT, page + ext);

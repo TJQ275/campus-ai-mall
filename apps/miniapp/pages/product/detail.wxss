@@ -21,5 +21,12 @@
 }
 .bar-icon { font-size: 24rpx; color: #646566; padding: 0 16rpx; }
 .bar-icon.ai { color: #07c160; font-weight: 700; }
-.bar-btn { flex: 1; margin: 0 8rpx; height: 76rpx; line-height: 76rpx; font-size: 26rpx; }
+.bar-btn {
+  flex: 1;
+  margin: 0 8rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 26rpx;
+  padding: 0;
+}
 .buy { background: #ee0a24; }

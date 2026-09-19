@@ -10,4 +10,10 @@
   align-items: center; justify-content: space-between; padding: 16rpx 24rpx;
   box-shadow: 0 -2rpx 12rpx rgba(0,0,0,.06);
 }
-.pay-btn { width: 260rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; }
+.pay-btn {
+  width: 240rpx;
+  height: 76rpx;
+  line-height: 76rpx;
+  font-size: 28rpx;
+  padding: 0;
+}
