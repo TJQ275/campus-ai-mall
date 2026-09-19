@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './env.js';
 import { sql } from 'drizzle-orm';
 import { createDb, ensureVectorExtension, ensureVectorIndexes } from './client.js';
 

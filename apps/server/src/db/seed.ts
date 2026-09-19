@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './env.js';
 import { randomBytes, scryptSync } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { createDb, ensureVectorExtension, type Db } from './client.js';

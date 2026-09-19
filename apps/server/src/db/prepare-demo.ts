@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import './env.js';
 import { createDb } from './client.js';
 import { LlmService } from '../modules/ai/llm.service.js';
 import { ReviewService } from '../modules/review/review.service.js';

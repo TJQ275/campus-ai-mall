@@ -117,6 +117,9 @@ pnpm test           # 34 项后端全链路 + 22 项小程序
 
 演示账号：管理端 `admin / admin123`；小程序端任意 code 即可登录。
 
+**当前已切到真实 PostgreSQL**：PostgreSQL 18.6 + pgvector 0.8.6（本机原生安装，非 Docker），29 张表与 3 个 HNSW 索引均已建好，验收 56 项全部通过。
+想切回零安装的 PGlite：把 `.env` 的 `DB_DRIVER` 改成 `pglite` 即可，代码不用动。
+
 **没有大模型 Key 也能完整演示**：`LLM_API_KEY` 留空时走内置规则引擎，`GET /api/ai/status` 可查看当前模式与全部工具清单（15 个）。配置 `LLM_EMBEDDING_MODEL` 后执行 `pnpm ai:embed` 即可把检索从关键词升级为语义。
 
 ## 想把它变成自己的项目
