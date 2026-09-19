@@ -1,6 +1,6 @@
 {
   "description": "AI优选零食 小程序（校园零食 + 二手教材）",
-  "appid": "touristappid",
+  "appid": "wx4d5e757cc3836855",
   "projectname": "AI优选零食",
   "compileType": "miniprogram",
   "libVersion": "3.5.0",
@@ -10,8 +10,30 @@
     "enhance": true,
     "postcss": true,
     "minified": true,
-    "bigPackageSizeSupport": true
+    "bigPackageSizeSupport": true,
+    "compileWorklet": false,
+    "uglifyFileName": false,
+    "uploadWithSourceMap": true,
+    "packNpmManually": false,
+    "packNpmRelationList": [],
+    "minifyWXSS": true,
+    "minifyWXML": true,
+    "localPlugins": false,
+    "disableUseStrict": false,
+    "useCompilerPlugins": false,
+    "condition": false,
+    "babelSetting": {
+      "ignore": [],
+      "disablePlugins": [],
+      "outputPath": ""
+    }
   },
   "miniprogramRoot": "./",
-  "condition": {}
+  "condition": {},
+  "simulatorPluginLibVersion": {},
+  "packOptions": {
+    "ignore": [],
+    "include": []
+  },
+  "editorSetting": {}
 }

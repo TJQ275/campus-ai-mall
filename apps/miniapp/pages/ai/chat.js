@@ -72,7 +72,9 @@ Page({
     this.setData({ messages: [] });
   },
 
-  send(text) {
+  async send(text) {
+    // 流式请求绕过了 utils/request 的统一封装，这里必须自己保证已登录，否则会带空 token 打到后端
+    await api.ensureLogin().catch(() => null);
     const messages = this.data.messages.concat([
       { key: 'u' + Date.now(), role: 'user', text },
       { key: 'a' + Date.now(), role: 'assistant', text: '', tools: [], cards: [], action: null, streaming: true },
