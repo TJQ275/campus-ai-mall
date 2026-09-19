@@ -12,13 +12,21 @@ Page({
   async load() {
     try {
       await api.ensureLogin();
-      const [user, wallet, status, summary] = await Promise.all([
+      // 这里刻意不用数组解构 `const [a, b] = ...`：
+      // 开发者工具的增强编译走 SWC，数组解构会被编译成 _sliced_to_array，
+      // 它依赖 @swc/runtime/_array_with_holes.js —— 而这个运行时助手在工具里没被注册，
+      // 一用就报「module '@swc/runtime/_array_with_holes.js' is not defined」，整个页面起不来。
+      const results = await Promise.all([
         api.me(),
         api.wallet(),
         api.aiStatus(),
         // 角标只统计数量：以前是拉全量订单再在本地数，订单越多越慢
         api.orderSummary(),
       ]);
+      const user = results[0];
+      const wallet = results[1];
+      const status = results[2];
+      const summary = results[3];
       this.setData({
         user: Object.assign({}, user, { avatar: assetUrl(user.avatar) }),
         balanceText: yuan(wallet.balanceCents),

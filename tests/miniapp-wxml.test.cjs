@@ -122,7 +122,19 @@ for (const wxml of wxmlFiles) {
   }
 }
 
-// 6) app.json 里注册的页面文件是否齐全
+// 6) 禁止数组解构：SWC 会把它编译成 _sliced_to_array，进而 require @swc/runtime/_array_with_holes.js，
+//    而开发者工具没有注册这个助手模块，一用整个页面就报错起不来。
+for (const file of files.filter((f) => f.endsWith('.js'))) {
+  const rel = path.relative(ROOT, file).split(path.sep).join('/');
+  const lines = fs.readFileSync(file, 'utf8').split('\n');
+  lines.forEach((line, index) => {
+    if (/^\s*(const|let|var)\s*\[[^\]]*\]\s*=/.test(line) && !/^\s*\/\//.test(line)) {
+      problems.push(rel + ':' + (index + 1) + '：不要用数组解构（会触发 @swc/runtime/_array_with_holes 缺失）；改成 const r = await ... 然后 r[0] / r[1]');
+    }
+  });
+}
+
+// 7) app.json 里注册的页面文件是否齐全
 for (const page of appJson.pages) {
   for (const ext of ['.js', '.json', '.wxml']) {
     const f = path.join(ROOT, page + ext);
