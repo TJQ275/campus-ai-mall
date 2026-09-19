@@ -76,7 +76,12 @@ export class CatalogService {
     if (params.condition) conditions.push(eq(products.condition, params.condition));
     if (params.course) conditions.push(ilike(products.course, '%' + params.course + '%'));
     if (params.isbn) conditions.push(eq(products.isbn, params.isbn));
-    if (params.tags?.length) conditions.push(sql`${products.tags} @> ${JSON.stringify(params.tags)}::jsonb`);
+    // 标签采用「任一命中」：用户说「想吃辣的、熬夜续命」时不该要求商品同时具备两个标签。
+    // 注意必须用 ARRAY[...] 展开成独立参数，直接把 JS 数组当参数会被渲染成 ($1, $2) 行构造器。
+    if (params.tags?.length) {
+      const list = sql.join(params.tags.map((tag) => sql`${tag}`), sql`, `);
+      conditions.push(sql`${products.tags} ?| ARRAY[${list}]::text[]`);
+    }
 
     const where = and(...conditions);
     const orderBy =

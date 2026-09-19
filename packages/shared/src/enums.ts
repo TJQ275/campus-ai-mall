@@ -79,19 +79,6 @@ export const AiScene = {
 } as const;
 export type AiScene = (typeof AiScene)[keyof typeof AiScene];
 
-/** AI 流式事件类型（前后端协议，小程序按此渲染） */
-export const AiEventType = {
-  TEXT: 'text',
-  TOOL_START: 'tool_start',
-  TOOL_RESULT: 'tool_result',
-  CARDS: 'cards',
-  ACTION_CONFIRM: 'action_confirm',
-  USAGE: 'usage',
-  ERROR: 'error',
-  DONE: 'done',
-} as const;
-export type AiEventType = (typeof AiEventType)[keyof typeof AiEventType];
-
 /** 订单来源：普通下单 / AI 助手代下单 —— 用于统计 AI 转化 */
 export const OrderSource = { MINIAPP: 'miniapp', AI: 'ai' } as const;
 export type OrderSource = (typeof OrderSource)[keyof typeof OrderSource];
