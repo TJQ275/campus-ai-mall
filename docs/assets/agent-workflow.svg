@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 400" width="900" height="400" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="b" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#909399"/>
+    </marker>
+    <style>
+      .t { font-size: 14px; fill: #303133; font-weight: 600; }
+      .s { font-size: 11.5px; fill: #606266; }
+      .m { font-size: 11px; fill: #909399; }
+      .ln { stroke: #909399; stroke-width: 1.5; fill: none; marker-end: url(#b); }
+    </style>
+  </defs>
+  <text x="450" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#303133">Agent 工作流与作答前校验</text>
+
+  <!-- 阶段 -->
+  <g>
+    <rect x="30" y="60" width="140" height="68" rx="10" fill="#ecf5ff" stroke="#409eff" stroke-width="1.5"/>
+    <text class="t" x="100" y="88" text-anchor="middle">① 理解意图</text>
+    <text class="m" x="100" y="108" text-anchor="middle">识别场景与诉求</text>
+
+    <rect x="195" y="60" width="140" height="68" rx="10" fill="#ecf5ff" stroke="#409eff" stroke-width="1.5"/>
+    <text class="t" x="265" y="88" text-anchor="middle">② 规划步骤</text>
+    <text class="m" x="265" y="108" text-anchor="middle">装配可用工具</text>
+
+    <rect x="360" y="60" width="140" height="68" rx="10" fill="#f0f9eb" stroke="#67c23a" stroke-width="1.5"/>
+    <text class="t" x="430" y="88" text-anchor="middle">③ 执行工具</text>
+    <text class="m" x="430" y="108" text-anchor="middle">最多 6 轮 · 去重</text>
+
+    <rect x="525" y="60" width="140" height="68" rx="10" fill="#fdf6ec" stroke="#e6a23c" stroke-width="1.5"/>
+    <text class="t" x="595" y="88" text-anchor="middle">④ 校验回答</text>
+    <text class="m" x="595" y="108" text-anchor="middle">4 条规则</text>
+
+    <rect x="690" y="60" width="140" height="68" rx="10" fill="#f0f9eb" stroke="#67c23a" stroke-width="1.5"/>
+    <text class="t" x="760" y="88" text-anchor="middle">⑤ 生成回复</text>
+    <text class="m" x="760" y="108" text-anchor="middle">SSE 流式推送</text>
+  </g>
+  <path class="ln" d="M170,94 L193,94"/><path class="ln" d="M335,94 L358,94"/>
+  <path class="ln" d="M500,94 L523,94"/><path class="ln" d="M665,94 L688,94"/>
+
+  <!-- 校验分支 -->
+  <path class="ln" d="M595,128 L595,165"/>
+  <polygon points="595,165 700,200 595,235 490,200" fill="#fff" stroke="#e6a23c" stroke-width="1.5"/>
+  <text class="s" x="595" y="196" text-anchor="middle" font-weight="600">命中阻断规则？</text>
+  <text class="m" x="595" y="214" text-anchor="middle">R1 假成功 / R4 空回复</text>
+
+  <path class="ln" d="M490,200 L400,200 L400,255" stroke="#e6a23c"/>
+  <rect x="300" y="258" width="200" height="62" rx="10" fill="#fdf6ec" stroke="#e6a23c" stroke-width="1.5"/>
+  <text class="s" x="400" y="282" text-anchor="middle" font-weight="600">带纠正指令重写一次</text>
+  <text class="m" x="400" y="302" text-anchor="middle">仍不过 → 返回诚实兜底说明</text>
+  <text class="m" x="400" y="336" text-anchor="middle" fill="#e6a23c">宁可说「没办成」，不能假称「办成了」</text>
+
+  <path class="ln" d="M700,200 L800,200 L800,258" stroke="#67c23a"/>
+  <rect x="700" y="258" width="180" height="62" rx="10" fill="#f0f9eb" stroke="#67c23a" stroke-width="1.5"/>
+  <text class="s" x="790" y="282" text-anchor="middle" font-weight="600">直接发给用户</text>
+  <text class="m" x="790" y="302" text-anchor="middle">并落库、推 usage 事件</text>
+
+  <!-- 规则表 -->
+  <rect x="30" y="258" width="250" height="118" rx="10" fill="#fafafa" stroke="#dcdfe6" stroke-width="1.5"/>
+  <text class="s" x="46" y="282" font-weight="600">四条校验规则</text>
+  <text class="m" x="46" y="303">R1 声称完成写操作但没调用工具 → 阻断</text>
+  <text class="m" x="46" y="322">R2 金额在工具结果里找不到出处 → 告警</text>
+  <text class="m" x="46" y="341">R3 政策回答没有引用来源 → 告警</text>
+  <text class="m" x="46" y="360">R4 空回复 → 阻断</text>
+</svg>

@@ -13,7 +13,8 @@
  */
 const ENV = {
   dev: 'http://localhost:3100/api',
-  device: 'http://192.168.0.30:3100/api',
+  // 真机预览用：把下面的 IP 改成**你自己电脑**的局域网 IP（ipconfig 里看 IPv4）
+  device: 'http://192.168.1.100:3100/api',
   prod: 'https://your-domain.com/api',
 };
 

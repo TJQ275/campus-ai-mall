@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 600" width="920" height="600" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#909399"/>
+    </marker>
+    <style>
+      .t { font-size: 15px; fill: #303133; font-weight: 600; }
+      .s { font-size: 12px; fill: #606266; }
+      .m { font-size: 11px; fill: #909399; }
+      .box { fill: #fff; stroke: #dcdfe6; stroke-width: 1.5; }
+      .ln { stroke: #909399; stroke-width: 1.4; fill: none; marker-end: url(#a); }
+    </style>
+  </defs>
+  <text x="460" y="30" text-anchor="middle" font-size="17" font-weight="700" fill="#303133">AI优选零食 · 系统架构</text>
+
+  <rect class="box" x="40" y="56" width="240" height="72" rx="10"/>
+  <text class="t" x="160" y="84" text-anchor="middle">微信小程序（原生）</text>
+  <text class="s" x="160" y="106" text-anchor="middle">买家端 + 商家工作台</text>
+
+  <rect class="box" x="340" y="56" width="240" height="72" rx="10"/>
+  <text class="t" x="460" y="84" text-anchor="middle">管理后台（Vue 3）</text>
+  <text class="s" x="460" y="106" text-anchor="middle">商品 / 订单 / AI 成本 / 日志</text>
+
+  <rect class="box" x="640" y="56" width="240" height="72" rx="10"/>
+  <text class="t" x="760" y="84" text-anchor="middle">接口文档（Swagger）</text>
+  <text class="s" x="760" y="106" text-anchor="middle">/api/docs</text>
+
+  <!-- 三条线走不同的横向通道，避免叠在一起 -->
+  <path class="ln" d="M160,128 L160,152 L400,152 L400,166 L460,166 L460,186"/>
+  <path class="ln" d="M460,128 L460,186"/>
+  <path class="ln" d="M760,128 L760,170 L520,170 L520,180 L460,180 L460,186"/>
+
+  <rect x="120" y="190" width="680" height="158" rx="12" fill="#f0f9eb" stroke="#67c23a" stroke-width="1.6"/>
+  <text class="t" x="460" y="217" text-anchor="middle">NestJS 后端 · 单端口 3100（同时托管管理后台构建产物）</text>
+  <line x1="150" y1="231" x2="770" y2="231" stroke="#b3e19d" stroke-width="1"/>
+
+  <rect x="145" y="246" width="196" height="80" rx="8" fill="#fafcf8" stroke="#c2e7b0" stroke-width="1.2"/>
+  <text class="s" x="243" y="270" text-anchor="middle" font-weight="600">Agent 工作流</text>
+  <text class="m" x="243" y="291" text-anchor="middle">理解 → 规划 → 执行</text>
+  <text class="m" x="243" y="309" text-anchor="middle">→ 校验 → 回复</text>
+
+  <rect x="362" y="246" width="196" height="80" rx="8" fill="#fafcf8" stroke="#c2e7b0" stroke-width="1.2"/>
+  <text class="s" x="460" y="270" text-anchor="middle" font-weight="600">15 个 Function 工具</text>
+  <text class="m" x="460" y="291" text-anchor="middle">导购 / 客服 / 商家</text>
+  <text class="m" x="460" y="309" text-anchor="middle">按场景动态装配</text>
+
+  <rect x="579" y="246" width="196" height="80" rx="8" fill="#fafcf8" stroke="#c2e7b0" stroke-width="1.2"/>
+  <text class="s" x="677" y="270" text-anchor="middle" font-weight="600">两阶段写操作</text>
+  <text class="m" x="677" y="291" text-anchor="middle">先落 pending 表</text>
+  <text class="m" x="677" y="309" text-anchor="middle">用户确认后原子执行</text>
+
+  <path class="ln" d="M300,348 L300,412"/>
+  <path class="ln" d="M620,348 L620,412"/>
+
+  <rect x="145" y="416" width="310" height="86" rx="10" fill="#ecf5ff" stroke="#409eff" stroke-width="1.6"/>
+  <text class="t" x="300" y="444" text-anchor="middle">PostgreSQL + pgvector</text>
+  <text class="s" x="300" y="466" text-anchor="middle">30 张表 · HNSW 向量索引</text>
+  <text class="m" x="300" y="486" text-anchor="middle">PGlite / 原生 / Docker 三条路径</text>
+
+  <rect x="465" y="416" width="310" height="86" rx="10" fill="#fdf6ec" stroke="#e6a23c" stroke-width="1.6"/>
+  <text class="t" x="620" y="444" text-anchor="middle">Python 重排服务</text>
+  <text class="s" x="620" y="466" text-anchor="middle">FastAPI · BM25 + RRF</text>
+  <text class="m" x="620" y="486" text-anchor="middle">挂掉自动跳过，检索不受影响</text>
+
+  <path class="ln" d="M700,502 L700,545 L460,545 L460,502" stroke-dasharray="5 4"/>
+  <text class="m" x="580" y="565" text-anchor="middle">大模型 API（可换 6 类厂商；无 Key 或调用失败时自动降级到本地规则引擎）</text>
+</svg>

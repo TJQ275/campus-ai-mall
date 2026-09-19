@@ -1,0 +1,38 @@
+# 换行符策略。
+#
+# 为什么这个文件对**这个项目**特别重要：
+# 仓库主要在 Windows 上开发，但部署脚本（deploy/deploy.sh、nginx 配置）要在 Linux 上跑。
+# 不声明的话，Windows 提交的文件带 CRLF，Linux 上 clone 下来 shell 脚本会报
+# "/bin/bash^M: bad interpreter" —— 这是最经典、也最难查的一类「别人克隆下来跑不了」。
+
+# 默认交给 git 自动判断：仓库里统一存 LF，检出时按平台转换
+* text=auto
+
+# 必须在 Linux 上执行的，强制 LF
+*.sh          text eol=lf
+Dockerfile    text eol=lf
+*.conf        text eol=lf
+
+# Windows 脚本强制 CRLF（PowerShell 对 LF 的兼容性不如 CRLF 稳）
+*.ps1         text eol=crlf
+*.cmd         text eol=crlf
+*.bat         text eol=crlf
+
+# 二进制，别做任何转换
+*.png         binary
+*.jpg         binary
+*.jpeg        binary
+*.gif         binary
+*.webp        binary
+*.ico         binary
+*.woff        binary
+*.woff2       binary
+*.exe         binary
+
+# 锁文件在 diff 里全是噪音，标记为生成物
+pnpm-lock.yaml  -diff linguist-generated
+apps/server/drizzle/meta/**  linguist-generated
+
+# 文档与源码的语言统计（GitHub 语言条）
+docs/**       linguist-documentation
+*.md          linguist-documentation

@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 900 380" width="900" height="380" font-family="-apple-system,BlinkMacSystemFont,'Segoe UI','Noto Sans SC','PingFang SC','Microsoft YaHei',sans-serif">
+  <defs>
+    <marker id="c" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0,0 L10,4 L0,8 z" fill="#909399"/>
+    </marker>
+    <style>
+      .t { font-size: 14px; fill: #303133; font-weight: 600; }
+      .s { font-size: 11.5px; fill: #606266; }
+      .m { font-size: 11px; fill: #909399; }
+      .ln { stroke: #909399; stroke-width: 1.5; fill: none; marker-end: url(#c); }
+    </style>
+  </defs>
+  <text x="450" y="28" text-anchor="middle" font-size="17" font-weight="700" fill="#303133">RAG 检索链路：召回 → 重排 → 精选</text>
+
+  <rect x="30" y="60" width="150" height="70" rx="10" fill="#f4f4f5" stroke="#c0c4cc" stroke-width="1.5"/>
+  <text class="t" x="105" y="88" text-anchor="middle">用户提问</text>
+  <text class="m" x="105" y="108" text-anchor="middle">「满多少免运费」</text>
+  <path class="ln" d="M180,95 L212,95"/>
+
+  <!-- 双路召回 -->
+  <rect x="215" y="46" width="185" height="46" rx="8" fill="#ecf5ff" stroke="#409eff" stroke-width="1.5"/>
+  <text class="s" x="307" y="68" text-anchor="middle" font-weight="600">向量检索（pgvector）</text>
+  <text class="m" x="307" y="84" text-anchor="middle" fill="#909399">语义相近，容得下同义说法</text>
+
+  <rect x="215" y="104" width="185" height="46" rx="8" fill="#f0f9eb" stroke="#67c23a" stroke-width="1.5"/>
+  <text class="s" x="307" y="126" text-anchor="middle" font-weight="600">关键词检索（兜底）</text>
+  <text class="m" x="307" y="142" text-anchor="middle">2-gram 分词 + 同义词扩展</text>
+
+  <path class="ln" d="M400,95 L432,95"/>
+  <rect x="435" y="60" width="120" height="70" rx="10" fill="#fff" stroke="#dcdfe6" stroke-width="1.5"/>
+  <text class="t" x="495" y="90" text-anchor="middle">召回 20 条</text>
+  <text class="m" x="495" y="110" text-anchor="middle">放宽候选</text>
+
+  <path class="ln" d="M555,95 L587,95"/>
+  <rect x="590" y="52" width="175" height="86" rx="10" fill="#fdf6ec" stroke="#e6a23c" stroke-width="1.6"/>
+  <text class="t" x="677" y="78" text-anchor="middle">Python 重排</text>
+  <text class="s" x="677" y="99" text-anchor="middle">BM25 + RRF 融合</text>
+  <text class="m" x="677" y="118" text-anchor="middle">挂了就跳过，沿用原序</text>
+
+  <path class="ln" d="M765,95 L797,95"/>
+  <rect x="800" y="60" width="80" height="70" rx="10" fill="#f0f9eb" stroke="#67c23a" stroke-width="1.6"/>
+  <text class="t" x="840" y="90" text-anchor="middle">精选 4</text>
+  <text class="m" x="840" y="110" text-anchor="middle">喂给模型</text>
+
+  <!-- 说明 -->
+  <rect x="30" y="180" width="850" height="80" rx="10" fill="#fafafa" stroke="#dcdfe6" stroke-width="1.4"/>
+  <text class="s" x="50" y="206" font-weight="600">为什么不能「召回 4 条直出」</text>
+  <text class="m" x="50" y="228">向量召回擅长「找得到」，不擅长「排得准」—— 最相关的那条可能排在第 7 位，压根没进候选。</text>
+  <text class="m" x="50" y="248">重排用更准但更慢的打分器重新排序，因此必须先放宽召回、再收敛，两者配合才有意义。</text>
+
+  <rect x="30" y="278" width="850" height="80" rx="10" fill="#fdf6ec" stroke="#e6a23c" stroke-width="1.4"/>
+  <text class="s" x="50" y="304" font-weight="600" fill="#b88230">实测踩到的两个坑</text>
+  <text class="m" x="50" y="326">① 中文只切双字会漏：查询切成长句双字，而文档里「满」是独立单字，两边一个 token 都对不上</text>
+  <text class="m" x="50" y="346">② 词法全 0 时不能做 RRF 融合：那是输入顺序，和召回排名正好互相抵消，会融出一个死平</text>
+</svg>
