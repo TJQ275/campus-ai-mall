@@ -1,6 +1,7 @@
 import 'reflect-metadata';
 import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { Logger } from '@nestjs/common';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
@@ -27,6 +28,21 @@ async function bootstrap() {
 
   // 上传的商品图 / 用户评价图：静态托管在 /uploads
   app.useStaticAssets(path.resolve(process.cwd(), 'uploads'), { prefix: '/uploads/' });
+
+  // 管理后台的构建产物直接由后端托管 —— 这样整站只有**一个端口、一个来源**：
+  //   http://localhost:3100/        管理后台
+  //   http://localhost:3100/api/…   接口
+  // 不需要 nginx、不需要 CORS、不需要 Vite 代理。
+  // 管理后台用的是 hash 路由（/#/products），所以不用配 history 回退规则。
+  const adminDist = [
+    path.resolve(process.cwd(), '../admin/dist'), // 从 apps/server 启动
+    path.resolve(process.cwd(), 'apps/admin/dist'), // 从仓库根启动
+  ].find((dir) => fs.existsSync(path.join(dir, 'index.html')));
+  if (adminDist) {
+    app.useStaticAssets(adminDist);
+  } else {
+    logger.warn('未找到管理后台构建产物，先执行 pnpm build:admin（当前只有 API 可用）');
+  }
 
   // 上传接口收 base64 图片，默认的 100kb JSON 限制会让稍大的图片直接 413。
   // 放宽到 8mb（5MB 图片 base64 后约 6.7MB），真正的业务校验在 UploadController 里。
@@ -55,8 +71,10 @@ async function bootstrap() {
   }
 
   const port = Number(process.env.PORT ?? 3100);
+  // 不指定 host：Node 绑到 :: 并开双栈，localhost / 127.0.0.1 / [::1] / 局域网 IP 都能连。
   await app.listen(port);
   logger.log('API 已启动: http://localhost:' + port + prefix + (swaggerEnabled ? '  (文档 ' + prefix + '/docs)' : ''));
+  if (adminDist) logger.log('管理后台: http://localhost:' + port + '/   （同一个端口，直接当网站用）');
   if (!isProduction) {
     logger.log('当前是开发模式：接口文档开放、登录接口限流较宽松。上线前请设置 NODE_ENV=production');
   }
