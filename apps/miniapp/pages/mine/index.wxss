@@ -1,0 +1,13 @@
+.profile { display: flex; align-items: center; }
+.avatar { width: 110rpx; height: 110rpx; border-radius: 50%; background: #f2f3f5; }
+.nick { font-size: 32rpx; font-weight: 700; }
+.balance { text-align: right; }
+.section-title { font-size: 30rpx; font-weight: 700; }
+.order-grid { display: flex; margin-top: 20rpx; }
+.order-cell { flex: 1; text-align: center; }
+.num { font-size: 34rpx; font-weight: 700; color: #07c160; }
+.cell {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 26rpx 0; border-bottom: 1rpx solid #f2f3f5; font-size: 28rpx;
+}
+.cell:last-child { border-bottom: none; }

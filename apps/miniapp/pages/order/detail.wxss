@@ -1,0 +1,5 @@
+.status-card { background: linear-gradient(135deg, #e8fff3, #f0f9ff); }
+.status-text { font-size: 34rpx; font-weight: 700; margin-bottom: 8rpx; }
+.link { color: #07c160; font-size: 24rpx; margin-top: 8rpx; }
+.actions-row { display: flex; padding: 0 20rpx; }
+.act { flex: 1; margin: 0 8rpx; height: 80rpx; line-height: 80rpx; font-size: 28rpx; border-radius: 999rpx; }

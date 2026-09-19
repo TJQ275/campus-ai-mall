@@ -1,0 +1,27 @@
+<view>
+  <view class="card">
+    <view class="field">
+      <text class="label">收货人</text>
+      <input class="input" value="{{receiver}}" data-key="receiver" bindinput="onField" placeholder="姓名" />
+    </view>
+    <view class="field">
+      <text class="label">手机号</text>
+      <input class="input" value="{{phone}}" data-key="phone" bindinput="onField" placeholder="11 位手机号" />
+    </view>
+    <view class="field">
+      <text class="label">校区楼栋</text>
+      <input class="input" value="{{campus}}" data-key="campus" bindinput="onField" placeholder="例如 东校区 3 号宿舍楼" />
+    </view>
+    <view class="field">
+      <text class="label">详细地址</text>
+      <input class="input" value="{{detail}}" data-key="detail" bindinput="onField" placeholder="例如 412 室 / 自提柜" />
+    </view>
+    <view class="between" style="margin-top: 20rpx">
+      <text>设为默认地址</text>
+      <switch checked="{{isDefault}}" bindchange="toggleDefault" color="#07c160" />
+    </view>
+  </view>
+  <view style="padding: 24rpx">
+    <button class="btn-primary" bindtap="save">保存</button>
+  </view>
+</view>

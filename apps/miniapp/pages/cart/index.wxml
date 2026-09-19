@@ -1,0 +1,36 @@
+<view>
+  <view class="card" wx:if="{{list.length}}">
+    <view class="cart-item" wx:for="{{list}}" wx:key="id">
+    
+    <view class="check {{item.selected ? 'checked' : ''}}" data-id="{{item.id}}" data-index="{{index}}" bindtap="toggle">
+        <text wx:if="{{item.selected}}">✓</text>
+      </view>
+      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" data-pid="{{item.productId}}" bindtap="goProduct" />
+      <view class="cart-info">
+        <view class="product-title">{{item.title}}</view>
+        <view class="muted" wx:if="{{item.source === 'ai'}}">AI 助手加入</view>
+        <view class="between">
+          <text class="price">{{item.priceText}}</text>
+          <view class="stepper">
+            <view class="step" data-id="{{item.id}}" data-index="{{index}}" data-delta="-1" bindtap="changeQty">-</view>
+            <view class="step-num">{{item.quantity}}</view>
+            <view class="step" data-id="{{item.id}}" data-index="{{index}}" data-delta="1" bindtap="changeQty">+</view>
+          </view>
+        </view>
+        <view class="del" data-id="{{item.id}}" bindtap="remove">删除</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="empty" wx:if="{{!list.length}}">
+    <view>购物车还是空的</view>
+    <button class="btn-primary" style="margin-top: 24rpx" bindtap="goShopping">去逛逛</button>
+  </view>
+
+  <view style="height: 140rpx"></view>
+  <view class="bottom-bar" wx:if="{{list.length}}">
+    <view class="total">合计 <text class="price">{{totalText}}</text></view>
+    <view class="muted">{{freightText}}</view>
+    <button class="btn-primary settle" bindtap="checkout">去结算({{selectedCount}})</button>
+  </view>
+</view>

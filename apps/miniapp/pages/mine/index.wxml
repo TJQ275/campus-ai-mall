@@ -1,0 +1,44 @@
+<view>
+  <view class="card profile">
+    <image class="avatar" src="{{user.avatar}}" mode="aspectFill" />
+    <view style="flex: 1; margin-left: 20rpx">
+      <view class="nick">{{user.nickname || '同学'}}</view>
+      <view class="muted">{{user.profile.major || '还没填写专业'}} {{user.profile.grade}}</view>
+    </view>
+    <view class="balance" bindtap="recharge">
+      <view class="price">{{balanceText}}</view>
+      <view class="muted">余额充值</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="between">
+      <text class="section-title">我的订单</text>
+      <text class="muted" data-status="all" bindtap="goOrders">全部 ></text>
+    </view>
+    <view class="order-grid">
+      <view class="order-cell" data-status="pending_pay" bindtap="goOrders">
+        <view class="num">{{orderCounts.pending_pay}}</view><view class="muted">待付款</view>
+      </view>
+      <view class="order-cell" data-status="paid" bindtap="goOrders">
+        <view class="num">{{orderCounts.paid}}</view><view class="muted">待发货</view>
+      </view>
+      <view class="order-cell" data-status="shipped" bindtap="goOrders">
+        <view class="num">{{orderCounts.shipped}}</view><view class="muted">待收货</view>
+      </view>
+      <view class="order-cell" data-status="finished" bindtap="goOrders">
+        <view class="num">{{orderCounts.finished}}</view><view class="muted">已完成</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="cell" bindtap="goAi">
+      <text>AI 购物助手</text>
+      <text class="muted">{{aiMock ? '本地演示模式' : '已接入大模型'}} ></text>
+    </view>
+    <view class="cell" bindtap="goAfterSale"><text>售后记录</text><text class="muted">></text></view>
+    <view class="cell" bindtap="goAddress"><text>收货地址</text><text class="muted">></text></view>
+    <view class="cell" bindtap="logout"><text>退出登录</text><text class="muted">></text></view>
+  </view>
+</view>

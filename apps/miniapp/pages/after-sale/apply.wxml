@@ -1,0 +1,28 @@
+<view>
+  <view class="card">
+    <view class="muted">售后类型</view>
+    <view class="type-row">
+      <view class="type {{type === 'refund' ? 'type-on' : ''}}" data-type="refund" bindtap="pickType">仅退款</view>
+      <view class="type {{type === 'return' ? 'type-on' : ''}}" data-type="return" bindtap="pickType">退货退款</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="muted">退款原因</view>
+    <picker mode="selector" range="{{reasons}}" value="{{reasonIndex}}" bindchange="pickReason">
+      <view class="picker">{{reasons[reasonIndex]}}</view>
+    </picker>
+    <view class="muted" style="margin-top: 20rpx">补充说明（选填）</view>
+    <textarea class="textarea" value="{{description}}" placeholder="例如：包装破损，薯片碎了大半" bindinput="onDesc" />
+  </view>
+
+  <view class="card">
+    <view class="muted">退款规则</view>
+    <view class="rule">零食需未拆封且不影响二次销售；二手书需保证书页完整、无新增涂写。审核通过后金额原路退回余额。</view>
+    <view class="rule muted">也可以直接问 AI 助手「我买的这个能退吗」，它会先查政策再帮你提交。</view>
+  </view>
+
+  <view style="padding: 24rpx">
+    <button class="btn-primary" disabled="{{submitting}}" bindtap="submit">提交申请</button>
+  </view>
+</view>

@@ -1,0 +1,3 @@
+.actions { display: flex; margin-top: 16rpx; }
+.link { color: #07c160; font-size: 24rpx; margin-right: 32rpx; }
+.link.danger { color: #ee0a24; }

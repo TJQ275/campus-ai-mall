@@ -1,0 +1,39 @@
+<view>
+  <view class="topbar">
+    <view class="search-box" bindtap="goSearch">搜索零食 / 教材 / ISBN</view>
+  </view>
+
+  <view class="kind-switch">
+    <view class="kind {{kind === 'snack' ? 'kind-on' : ''}}" data-kind="snack" bindtap="switchKind">零食</view>
+    <view class="kind {{kind === 'book' ? 'kind-on' : ''}}" data-kind="book" bindtap="switchKind">二手书</view>
+  </view>
+
+  <scroll-view class="cat-bar" scroll-x>
+    <view class="cat-chip {{activeId === 0 ? 'cat-on' : ''}}" data-id="0" bindtap="pickCategory">全部</view>
+    <view class="cat-chip {{activeId === item.id ? 'cat-on' : ''}}" wx:for="{{categories}}" wx:key="id"
+          data-id="{{item.id}}" bindtap="pickCategory">{{item.name}}</view>
+  </scroll-view>
+
+  <view class="sort-bar">
+    <view class="sort {{sort === 'default' ? 'sort-on' : ''}}" data-sort="default" bindtap="changeSort">综合</view>
+    <view class="sort {{sort === 'sales' ? 'sort-on' : ''}}" data-sort="sales" bindtap="changeSort">销量</view>
+    <view class="sort {{sort === 'price_asc' ? 'sort-on' : ''}}" data-sort="price_asc" bindtap="changeSort">价格↑</view>
+    <view class="sort {{sort === 'price_desc' ? 'sort-on' : ''}}" data-sort="price_desc" bindtap="changeSort">价格↓</view>
+  </view>
+
+  <view class="card">
+    <view class="product-card" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="goProduct">
+      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" />
+      <view class="product-info">
+        <view class="product-title">{{item.title}}</view>
+        <view class="muted">{{item.subtitle}}</view>
+        <view class="between">
+          <text class="price">{{item.priceText}}</text>
+          <text class="muted">已售 {{item.sales}}</text>
+        </view>
+      </view>
+    </view>
+    <view class="empty" wx:if="{{!loading && list.length === 0}}">没有找到商品</view>
+    <view class="empty" wx:if="{{loading}}">加载中…</view>
+  </view>
+</view>

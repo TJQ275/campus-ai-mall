@@ -1,0 +1,43 @@
+{
+  "pages": [
+    "pages/index/index",
+    "pages/category/index",
+    "pages/cart/index",
+    "pages/ai/chat",
+    "pages/mine/index",
+    "pages/search/index",
+    "pages/product/detail",
+    "pages/order/confirm",
+    "pages/order/list",
+    "pages/order/detail",
+    "pages/after-sale/apply",
+    "pages/after-sale/list",
+    "pages/address/list",
+    "pages/address/edit"
+  ],
+  "window": {
+    "backgroundTextStyle": "light",
+    "navigationBarBackgroundColor": "#3D3730",
+    "navigationBarTitleText": "校园 AI 商城",
+    "navigationBarTextStyle": "white",
+    "backgroundColor": "#F6F6F6"
+  },
+  "tabBar": {
+    "color": "#8C8071",
+    "selectedColor": "#07C160",
+    "backgroundColor": "#FFFFFF",
+    "borderStyle": "black",
+    "list": [
+      { "pagePath": "pages/index/index", "text": "首页" },
+      { "pagePath": "pages/category/index", "text": "分类" },
+      { "pagePath": "pages/cart/index", "text": "购物车" },
+      { "pagePath": "pages/ai/chat", "text": "AI 助手" },
+      { "pagePath": "pages/mine/index", "text": "我的" }
+    ]
+  },
+  "permission": {
+    "scope.userLocation": { "desc": "用于选择宿舍楼自提点" }
+  },
+  "sitemapLocation": "sitemap.json",
+  "style": "v2"
+}

@@ -1,0 +1,47 @@
+page {
+  background: #f6f6f6;
+  font-size: 28rpx;
+  color: #323233;
+  font-family: -apple-system, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+}
+
+.card {
+  background: #fff;
+  border-radius: 16rpx;
+  padding: 24rpx;
+  margin: 20rpx;
+  box-shadow: 0 2rpx 12rpx rgba(0, 0, 0, 0.04);
+}
+
+.row { display: flex; align-items: center; }
+.between { display: flex; align-items: center; justify-content: space-between; }
+.price { color: #ee0a24; font-weight: 700; }
+.muted { color: #969799; font-size: 24rpx; }
+.btn-primary {
+  background: #07c160;
+  color: #fff;
+  border-radius: 999rpx;
+  font-size: 28rpx;
+}
+.btn-primary[disabled] { background: #c8c9cc; color: #fff; }
+.tag {
+  display: inline-block;
+  background: #f2f3f5;
+  color: #646566;
+  border-radius: 6rpx;
+  padding: 4rpx 12rpx;
+  font-size: 22rpx;
+  margin-right: 8rpx;
+}
+.empty { text-align: center; color: #969799; padding: 120rpx 0; font-size: 26rpx; }
+.product-card { display: flex; padding: 20rpx 0; border-bottom: 1rpx solid #f2f3f5; }
+.product-card:last-child { border-bottom: none; }
+.product-cover {
+  width: 160rpx;
+  height: 160rpx;
+  border-radius: 12rpx;
+  background: #f2f3f5;
+  flex-shrink: 0;
+}
+.product-info { flex: 1; margin-left: 20rpx; display: flex; flex-direction: column; justify-content: space-between; }
+.product-title { font-size: 28rpx; line-height: 1.4; }

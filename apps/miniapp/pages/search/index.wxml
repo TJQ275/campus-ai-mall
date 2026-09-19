@@ -1,0 +1,33 @@
+<view>
+  <view class="search-bar">
+    <input class="search-input" value="{{keyword}}" placeholder="零食 / 教材 / 课程名"
+           confirm-type="search" bindinput="onInput" bindconfirm="search" />
+    <view class="scan-btn" bindtap="scan">扫码找书</view>
+    <view class="go-btn" bindtap="search">搜索</view>
+  </view>
+
+  <view class="card" wx:if="{{!searched}}">
+    <view class="muted" style="margin-bottom: 16rpx">热门搜索</view>
+    <view class="hot-row">
+      <view class="hot-word" wx:for="{{hotWords}}" wx:key="*this" data-word="{{item}}" bindtap="pickWord">{{item}}</view>
+    </view>
+    <view class="tip">
+      二手教材可以直接扫书背面的 ISBN 条码，比打字更快也更准。
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{searched}}">
+    <view class="product-card" wx:for="{{list}}" wx:key="id" data-id="{{item.id}}" bindtap="goProduct">
+      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" />
+      <view class="product-info">
+        <view class="product-title">{{item.title}}</view>
+        <view class="muted">{{item.subtitle}}</view>
+        <view class="between">
+          <text class="price">{{item.priceText}}</text>
+          <text class="muted">已售 {{item.sales}}</text>
+        </view>
+      </view>
+    </view>
+    <view class="empty" wx:if="{{!loading && list.length === 0}}">没有找到相关商品</view>
+  </view>
+</view>

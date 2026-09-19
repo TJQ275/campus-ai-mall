@@ -1,0 +1,17 @@
+{
+  "description": "校园 AI 商城小程序（零食 + 二手书）",
+  "appid": "touristappid",
+  "projectname": "campus-ai-mall",
+  "compileType": "miniprogram",
+  "libVersion": "3.5.0",
+  "setting": {
+    "urlCheck": false,
+    "es6": true,
+    "enhance": true,
+    "postcss": true,
+    "minified": true,
+    "bigPackageSizeSupport": true
+  },
+  "miniprogramRoot": "./",
+  "condition": {}
+}

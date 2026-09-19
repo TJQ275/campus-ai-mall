@@ -18,6 +18,8 @@
     "lint": "pnpm -r lint",
     "ai:embed": "pnpm --filter @campus/server ai:embed",
     "dev:admin": "pnpm --filter @campus/admin dev",
-    "build:admin": "pnpm --filter @campus/admin build"
+    "build:admin": "pnpm --filter @campus/admin build",
+    "test:miniapp": "node tests/miniapp-sse.test.cjs && node tests/miniapp-api.test.cjs",
+    "dev:miniapp": "echo 用微信开发者工具打开 apps/miniapp 目录"
   }
 }

@@ -1,0 +1,79 @@
+<view wx:if="{{product}}">
+  <swiper class="gallery" indicator-dots circular>
+    <swiper-item wx:for="{{product.images}}" wx:key="*this">
+      <image src="{{item}}" mode="aspectFill" class="gallery-img" />
+    </swiper-item>
+  </swiper>
+
+  <view class="card">
+    <view class="price-row">
+      <text class="price big">{{priceText}}</text>
+      <text class="muted strike" wx:if="{{product.originalPriceCents > product.priceCents}}">原价 ¥{{product.originalPriceCents / 100}}</text>
+    </view>
+    <view class="title">{{product.title}}</view>
+    <view class="muted">{{product.subtitle}}</view>
+    <view class="tags">
+      <text class="tag" wx:for="{{product.tags}}" wx:key="*this">{{item}}</text>
+    </view>
+    <view class="meta">
+      <text>库存 {{product.stock}}</text>
+      <text>已售 {{product.sales}}</text>
+      <text>评分 {{product.ratingAvg}}</text>
+    </view>
+    <view class="meta" wx:if="{{product.kind === 'book'}}">
+      <text wx:if="{{product.course}}">课程：{{product.course}}</text>
+      <text wx:if="{{product.isbn}}">ISBN：{{product.isbn}}</text>
+    </view>
+    <view class="meta" wx:if="{{product.spicyLevel !== null && product.kind === 'snack'}}">
+      <text>辣度：{{product.spicyLevel}}/5</text>
+      <text wx:if="{{product.shelfLifeDays}}">保质期 {{product.shelfLifeDays}} 天</text>
+    </view>
+  </view>
+
+  <view class="card" wx:if="{{skus.length}}">
+    <view class="muted">规格 / 副本</view>
+    <picker mode="selector" range="{{skus}}" range-key="name" value="{{skuIndex}}" bindchange="pickSku">
+      <view class="sku-picker">{{skus[skuIndex].name}} · ¥{{skus[skuIndex].priceCents / 100}}</view>
+    </picker>
+  </view>
+
+  <view class="card ai-card" wx:if="{{summary}}">
+    <view class="between">
+      <text class="section-title">AI 评论摘要</text>
+      <text class="muted">{{summary.model === 'template' ? '模板归纳' : summary.model}}</text>
+    </view>
+    <view class="summary-text">{{summary.summary}}</view>
+    <view class="pros" wx:if="{{summary.pros.length}}">
+      <text class="pros-tag" wx:for="{{summary.pros}}" wx:key="*this">👍 {{item}}</text>
+    </view>
+    <view class="pros" wx:if="{{summary.cons.length}}">
+      <text class="cons-tag" wx:for="{{summary.cons}}" wx:key="*this">⚠️ {{item}}</text>
+    </view>
+    <view class="muted" wx:if="{{summary.audience}}">适合：{{summary.audience}}</view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">商品描述</view>
+    <view class="desc">{{product.description}}</view>
+  </view>
+
+  <view class="card" wx:if="{{reviews.length}}">
+    <view class="section-title">用户评价</view>
+    <view class="review" wx:for="{{reviews}}" wx:key="id">
+      <view class="between">
+        <text>{{item.nickname}}</text>
+        <text class="muted">{{item.rating}} 分</text>
+      </view>
+      <view class="muted">{{item.content}}</view>
+    </view>
+  </view>
+
+  <view style="height: 140rpx"></view>
+
+  <view class="bottom-bar">
+    <view class="bar-icon" bindtap="goCart">购物车</view>
+    <view class="bar-icon ai" bindtap="askAi">问 AI</view>
+    <button class="btn-primary bar-btn" bindtap="addCart">加入购物车</button>
+    <button class="btn-primary bar-btn buy" bindtap="buyNow">立即购买</button>
+  </view>
+</view>

@@ -1,0 +1,68 @@
+<view class="page">
+  <view class="scene-bar">
+    <view class="scene {{scene === 'shopping' ? 'scene-on' : ''}}" data-scene="shopping" bindtap="switchScene">导购</view>
+    <view class="scene {{scene === 'support' ? 'scene-on' : ''}}" data-scene="support" bindtap="switchScene">客服</view>
+    <view class="scene" bindtap="scanBook">扫码找书</view>
+    <view class="scene" bindtap="newChat">新对话</view>
+  </view>
+
+  <scroll-view class="chat" scroll-y scroll-into-view="{{scrollTo}}" scroll-with-animation>
+    <view class="hint" wx:if="{{!messages.length}}">
+      <view class="hint-title">你好，我是校园商城的 AI 助手</view>
+      <view class="muted">{{statusText}}</view>
+      <view class="hint-text">可以直接说：想吃辣的 20 元以内、有高数的教材吗、我买的辣条能退吗。</view>
+      <view class="hint-text">我能真的帮你加购物车、查订单、提交售后 —— 涉及写操作时会先让你确认。</view>
+      <view class="quick-row">
+        <view class="quick" wx:for="{{quickAsks}}" wx:key="*this" data-q="{{item}}" bindtap="onQuickTap">{{item}}</view>
+      </view>
+    </view>
+
+    <view class="msg" wx:for="{{messages}}" wx:key="key" wx:for-index="index" id="msg-{{index}}">
+      <view wx:if="{{item.role === 'user'}}" class="bubble user">{{item.text}}</view>
+
+      <view wx:else class="assistant-wrap">
+        <view class="tools" wx:if="{{item.tools.length}}">
+          <view class="tool-chip" wx:for="{{item.tools}}" wx:for-item="tool" wx:key="label">
+            <text class="tool-dot {{tool.ok ? 'ok' : 'fail'}}"></text>
+            <text>{{tool.running ? tool.label : (tool.brief || tool.label)}}</text>
+          </view>
+        </view>
+
+        <view class="bubble assistant" wx:if="{{item.text}}">{{item.text}}</view>
+        <view class="bubble assistant typing" wx:if="{{item.streaming && !item.text}}">正在思考…</view>
+
+        <view class="cards" wx:if="{{item.cards.length}}">
+          <view class="chat-card" wx:for="{{item.cards}}" wx:for-item="card" wx:key="id"
+                data-id="{{card.id}}" bindtap="goProduct">
+            <image class="chat-cover" src="{{card.cover}}" mode="aspectFill" />
+            <view class="chat-info">
+              <view class="chat-title">{{card.title}}</view>
+              <view class="between">
+                <text class="price">{{card.priceText}}</text>
+                <text class="muted">已售 {{card.sales}}</text>
+              </view>
+            </view>
+          </view>
+        </view>
+
+        <view class="confirm" wx:if="{{item.action}}">
+          <view class="confirm-text">{{item.action.summary}}</view>
+          <view wx:if="{{item.action.status === 'pending'}}" class="confirm-btns">
+            <view class="cbtn ghost" data-id="{{item.action.id}}" data-index="{{index}}" data-decision="cancel" bindtap="confirmAction">取消</view>
+            <view class="cbtn solid" data-id="{{item.action.id}}" data-index="{{index}}" data-decision="confirm" bindtap="confirmAction">确认执行</view>
+          </view>
+          <view wx:else class="confirm-done">{{item.action.message}}</view>
+        </view>
+
+        <view class="msg-meta muted" wx:if="{{item.meta}}">{{item.meta}}</view>
+      </view>
+    </view>
+    <view style="height: 30rpx"></view>
+  </scroll-view>
+
+  <view class="input-bar">
+    <input class="chat-input" value="{{input}}" placeholder="说说你想要什么…" confirm-type="send"
+           bindinput="onInput" bindconfirm="sendFromInput" />
+    <button class="btn-primary send-btn" disabled="{{sending}}" bindtap="sendFromInput">发送</button>
+  </view>
+</view>

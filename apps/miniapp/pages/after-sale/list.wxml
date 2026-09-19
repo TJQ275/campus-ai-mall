@@ -1,0 +1,19 @@
+<view>
+  <view class="card" wx:for="{{list}}" wx:key="id">
+    <view class="between">
+      <text class="muted">{{item.afterSaleNo}}</text>
+      <text class="status">{{item.statusText}}</text>
+    </view>
+    <view class="between" style="margin-top: 12rpx">
+      <text>{{item.type === 'return' ? '退货退款' : '仅退款'}} · {{item.reason}}</text>
+      <text class="price">{{item.amountText}}</text>
+    </view>
+    <view class="muted" wx:if="{{item.description}}">{{item.description}}</view>
+    <view class="muted" wx:if="{{item.auditRemark}}">处理意见：{{item.auditRemark}}</view>
+    <view class="footer">
+      <text class="muted" wx:if="{{item.source === 'ai'}}">由 AI 助手提交</text>
+      <text class="link" wx:if="{{item.status === 'pending'}}" data-id="{{item.id}}" bindtap="cancel">撤销售后</text>
+    </view>
+  </view>
+  <view class="empty" wx:if="{{!list.length}}">还没有售后记录</view>
+</view>

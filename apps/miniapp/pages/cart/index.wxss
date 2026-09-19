@@ -1,0 +1,17 @@
+.cart-item { display: flex; padding: 20rpx 0; border-bottom: 1rpx solid #f2f3f5; align-items: center; }
+.check {
+  width: 40rpx; height: 40rpx; border: 2rpx solid #c8c9cc; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center; color: #fff; font-size: 26rpx;
+}
+.checked { background: #07c160; border-color: #07c160; }
+.cart-info { flex: 1; margin-left: 16rpx; }
+.stepper { display: flex; align-items: center; }
+.step { width: 48rpx; height: 48rpx; line-height: 48rpx; text-align: center; background: #f2f3f5; border-radius: 8rpx; }
+.step-num { width: 60rpx; text-align: center; }
+.del { color: #969799; font-size: 22rpx; margin-top: 8rpx; }
+.bottom-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; background: #fff; display: flex;
+  align-items: center; justify-content: space-between; padding: 16rpx 24rpx;
+  box-shadow: 0 -2rpx 12rpx rgba(0,0,0,.06);
+}
+.settle { width: 240rpx; height: 76rpx; line-height: 76rpx; font-size: 28rpx; }

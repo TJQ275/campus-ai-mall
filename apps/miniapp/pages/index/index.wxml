@@ -1,0 +1,64 @@
+<view>
+  <swiper class="banner" indicator-dots autoplay circular interval="4000">
+    <swiper-item wx:for="{{banners}}" wx:key="id">
+      <image class="banner-img" src="{{item.image}}" mode="aspectFill" />
+      <view class="banner-text">{{item.title}}</view>
+    </swiper-item>
+  </swiper>
+
+  <view class="card ai-entry" bindtap="goAi">
+    <view class="between">
+      <view>
+        <view class="ai-title">AI 购物助手</view>
+        <view class="muted">说需求就行：想吃辣的、20 元以内、有高数教材吗</view>
+      </view>
+      <view class="ai-badge">试试</view>
+    </view>
+    <view class="quick-row">
+      <view class="quick" wx:for="{{quickAsks}}" wx:key="*this" data-q="{{item}}" catchtap="goAi">{{item}}</view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="cat-grid">
+      <view class="cat-item" wx:for="{{categories}}" wx:key="id"
+            data-kind="{{item.kind}}" bindtap="goCategoryList">
+        <view class="cat-dot">{{item.name}}</view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="between">
+      <view class="section-title">为你推荐</view>
+      <view class="muted">{{recommendStrategy}}</view>
+    </view>
+    <view class="product-card" wx:for="{{recommend}}" wx:key="id" data-id="{{item.id}}" bindtap="goProduct">
+      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" />
+      <view class="product-info">
+        <view class="product-title">{{item.title}}</view>
+        <view class="reason" wx:if="{{item.reason}}">{{item.reason}}</view>
+        <view class="between">
+          <text class="price">{{item.priceText}}</text>
+          <text class="muted">已售 {{item.sales}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view class="card">
+    <view class="section-title">热销榜</view>
+    <view class="product-card" wx:for="{{hot}}" wx:key="id" data-id="{{item.id}}" bindtap="goProduct">
+      <image class="product-cover" src="{{item.cover}}" mode="aspectFill" />
+      <view class="product-info">
+        <view class="product-title">{{item.title}}</view>
+        <view class="between">
+          <text class="price">{{item.priceText}}</text>
+          <text class="muted">已售 {{item.sales}}</text>
+        </view>
+      </view>
+    </view>
+  </view>
+
+  <view style="height: 40rpx"></view>
+</view>

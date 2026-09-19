@@ -1,0 +1,18 @@
+<view>
+  <view class="card" wx:for="{{list}}" wx:key="id">
+    <view class="between">
+      <text>{{item.receiver}} {{item.phone}}</text>
+      <text class="tag" wx:if="{{item.isDefault}}">默认</text>
+    </view>
+    <view class="muted">{{item.campus}} {{item.detail}}</view>
+    <view class="actions">
+      <text class="link" data-id="{{item.id}}" bindtap="edit">编辑</text>
+      <text class="link" wx:if="{{!item.isDefault}}" data-id="{{item.id}}" bindtap="setDefault">设为默认</text>
+      <text class="link danger" data-id="{{item.id}}" bindtap="remove">删除</text>
+    </view>
+  </view>
+  <view class="empty" wx:if="{{!list.length}}">还没有收货地址</view>
+  <view style="padding: 24rpx">
+    <button class="btn-primary" bindtap="add">新增地址</button>
+  </view>
+</view>

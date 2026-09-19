@@ -38,10 +38,17 @@ export class CartService {
 
     const selected = rows.filter((r) => r.selected);
     const totalCents = selected.reduce((sum, r) => sum + r.priceCents * r.quantity, 0);
+    const totalQuantity = rows.reduce((sum, r) => sum + r.quantity, 0);
+    const selectedQuantity = selected.reduce((sum, r) => sum + r.quantity, 0);
     return {
       list: rows,
+      /** 已勾选的行数（用于「去结算(n)」） */
       selectedCount: selected.length,
+      /** 购物车里的商品种类数 */
       totalCount: rows.length,
+      /** 商品总件数（用于 tabBar 角标） */
+      totalQuantity,
+      selectedQuantity,
       totalCents,
       /** 满 19 元免配送费（与售后政策文案保持一致） */
       freightCents: selected.length === 0 || totalCents >= 1900 ? 0 : 100,
