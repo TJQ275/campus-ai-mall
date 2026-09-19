@@ -24,10 +24,10 @@
 
   <view class="empty" wx:if="{{!list.length}}">
     <view>购物车还是空的</view>
-    <button class="btn-primary" style="margin-top: 24rpx" bindtap="goShopping">去逛逛</button>
+    <button class="btn-primary mt-24" bindtap="goShopping">去逛逛</button>
   </view>
 
-  <view style="height: 140rpx"></view>
+  <view class="h-140"></view>
   <view class="bottom-bar" wx:if="{{list.length}}">
     <view class="total">合计 <text class="price">{{totalText}}</text></view>
     <view class="muted">{{freightText}}</view>

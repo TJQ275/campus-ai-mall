@@ -16,12 +16,12 @@
       <text class="label">详细地址</text>
       <input class="input" value="{{detail}}" data-key="detail" bindinput="onField" placeholder="例如 412 室 / 自提柜" />
     </view>
-    <view class="between" style="margin-top: 20rpx">
+    <view class="between mt-20">
       <text>设为默认地址</text>
       <switch checked="{{isDefault}}" bindchange="toggleDefault" color="#07c160" />
     </view>
   </view>
-  <view style="padding: 24rpx">
+  <view class="pd-24">
     <button class="btn-primary" bindtap="save">保存</button>
   </view>
 </view>

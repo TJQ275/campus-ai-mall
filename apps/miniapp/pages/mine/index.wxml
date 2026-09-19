@@ -1,7 +1,7 @@
 <view>
   <view class="card profile">
     <image class="avatar" src="{{user.avatar}}" mode="aspectFill" />
-    <view style="flex: 1; margin-left: 20rpx">
+    <view class="flex-1 ml-20">
       <view class="nick">{{user.nickname || '同学'}}</view>
       <view class="muted">{{user.profile.major || '还没填写专业'}} {{user.profile.grade}}</view>
     </view>

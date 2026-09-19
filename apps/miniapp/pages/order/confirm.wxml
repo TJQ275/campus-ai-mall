@@ -30,7 +30,7 @@
       <view class="channel {{channel === 'wechat' ? 'channel-on' : ''}}" data-channel="wechat" bindtap="pickChannel">微信</view>
       <view class="channel {{channel === 'alipay' ? 'channel-on' : ''}}" data-channel="alipay" bindtap="pickChannel">支付宝</view>
     </view>
-    <view class="muted" style="margin-top: 16rpx">备注</view>
+    <view class="muted mt-16">备注</view>
     <input class="remark" value="{{remark}}" placeholder="选填，例如放自提柜" bindinput="onRemark" />
   </view>
 
@@ -40,7 +40,7 @@
     <view class="between"><text>应付</text><text class="price">{{payText}}</text></view>
   </view>
 
-  <view style="height: 140rpx"></view>
+  <view class="h-140"></view>
   <view class="bottom-bar">
     <view>应付 <text class="price">{{payText}}</text></view>
     <button class="btn-primary pay-btn" disabled="{{submitting}}" bindtap="submit">提交订单</button>

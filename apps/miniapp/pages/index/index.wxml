@@ -60,5 +60,5 @@
     </view>
   </view>
 
-  <view style="height: 40rpx"></view>
+  <view class="h-40"></view>
 </view>

@@ -4,7 +4,7 @@
       <text class="muted">{{item.afterSaleNo}}</text>
       <text class="status">{{item.statusText}}</text>
     </view>
-    <view class="between" style="margin-top: 12rpx">
+    <view class="between mt-12">
       <text>{{item.type === 'return' ? '退货退款' : '仅退款'}} · {{item.reason}}</text>
       <text class="price">{{item.amountText}}</text>
     </view>

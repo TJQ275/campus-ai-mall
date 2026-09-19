@@ -7,7 +7,7 @@
   </view>
 
   <view class="card" wx:if="{{!searched}}">
-    <view class="muted" style="margin-bottom: 16rpx">热门搜索</view>
+    <view class="muted mb-16">热门搜索</view>
     <view class="hot-row">
       <view class="hot-word" wx:for="{{hotWords}}" wx:key="*this" data-word="{{item}}" bindtap="pickWord">{{item}}</view>
     </view>

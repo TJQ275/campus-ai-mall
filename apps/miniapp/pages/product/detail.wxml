@@ -68,7 +68,7 @@
     </view>
   </view>
 
-  <view style="height: 140rpx"></view>
+  <view class="h-140"></view>
 
   <view class="bottom-bar">
     <view class="bar-icon" bindtap="goCart">购物车</view>

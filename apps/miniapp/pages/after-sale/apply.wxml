@@ -12,7 +12,7 @@
     <picker mode="selector" range="{{reasons}}" value="{{reasonIndex}}" bindchange="pickReason">
       <view class="picker">{{reasons[reasonIndex]}}</view>
     </picker>
-    <view class="muted" style="margin-top: 20rpx">补充说明（选填）</view>
+    <view class="muted mt-20">补充说明（选填）</view>
     <textarea class="textarea" value="{{description}}" placeholder="例如：包装破损，薯片碎了大半" bindinput="onDesc" />
   </view>
 
@@ -22,7 +22,7 @@
     <view class="rule muted">也可以直接问 AI 助手「我买的这个能退吗」，它会先查政策再帮你提交。</view>
   </view>
 
-  <view style="padding: 24rpx">
+  <view class="pd-24">
     <button class="btn-primary" disabled="{{submitting}}" bindtap="submit">提交申请</button>
   </view>
 </view>

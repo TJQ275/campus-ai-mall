@@ -12,7 +12,7 @@
     </view>
   </view>
   <view class="empty" wx:if="{{!list.length}}">还没有收货地址</view>
-  <view style="padding: 24rpx">
+  <view class="pd-24">
     <button class="btn-primary" bindtap="add">新增地址</button>
   </view>
 </view>

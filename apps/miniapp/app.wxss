@@ -45,3 +45,15 @@ page {
 }
 .product-info { flex: 1; margin-left: 20rpx; display: flex; flex-direction: column; justify-content: space-between; }
 .product-title { font-size: 28rpx; line-height: 1.4; }
+/* 小工具类：替代内联 style —— WXML 里的 style 属性会被 VS Code 的 CSS 校验误报 */
+.mt-12 { margin-top: 12rpx; }
+.mt-16 { margin-top: 16rpx; }
+.mt-20 { margin-top: 20rpx; }
+.mt-24 { margin-top: 24rpx; }
+.mb-16 { margin-bottom: 16rpx; }
+.ml-20 { margin-left: 20rpx; }
+.pd-24 { padding: 24rpx; }
+.flex-1 { flex: 1; }
+.h-30 { height: 30rpx; }
+.h-40 { height: 40rpx; }
+.h-140 { height: 140rpx; }

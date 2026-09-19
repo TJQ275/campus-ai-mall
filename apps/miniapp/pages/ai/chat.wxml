@@ -57,7 +57,7 @@
         <view class="msg-meta muted" wx:if="{{item.meta}}">{{item.meta}}</view>
       </view>
     </view>
-    <view style="height: 30rpx"></view>
+    <view class="h-30"></view>
   </scroll-view>
 
   <view class="input-bar">
