@@ -259,16 +259,25 @@ async function main() {
   check('Key 不回显明文', settings.data && !('apiKey' in settings.data), '脱敏值 ' + (settings.data && settings.data.apiKeyMasked));
   check('提供预设清单', settings.data && settings.data.presets.length >= 4, (settings.data && settings.data.presets.length) + ' 个预设');
 
-  const badKey = await call('PUT', '/admin/settings/llm', { apiKey: 'sk-this-key-is-invalid', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' }, true);
-  check('保存配置成功', badKey.code === 0, '来源 ' + (badKey.data && badKey.data.runtime.configSource));
-  check('保存后切换到真实模型', badKey.data && badKey.data.runtime.mock === false, '模型 ' + (badKey.data && badKey.data.runtime.model));
+  // ⚠ 下面这段是**破坏性**的：它会把真实 Key 覆盖成假 Key，最后再调 reset 把所有 llm.* 配置删掉。
+  // 而 API 出于安全永远不回显明文 Key，所以一旦真 Key 被覆盖就**无法恢复**，只能去服务商后台重新申请。
+  // 这个坑真实发生过：跑一次加固测试就把后台配好的 DeepSeek Key 洗掉了。
+  // 因此有真 Key 时默认跳过，只在确认没有真实配置（CI / 全新环境）时才跑。
+  const forceDestructive = process.env.ALLOW_DESTRUCTIVE_AI_CONFIG_TEST === '1';
+  if (settings.data && settings.data.apiKeyConfigured && !forceDestructive) {
+    console.log('  ⏭  已配置真实 API Key，跳过破坏性的「保存/重置」用例，避免把 Key 洗掉。');
+    console.log('     需要在无真实配置的环境跑这些用例时，设置 ALLOW_DESTRUCTIVE_AI_CONFIG_TEST=1。');
+  } else {
+    const badKey = await call('PUT', '/admin/settings/llm', { apiKey: 'sk-this-key-is-invalid', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' }, true);
+    check('保存配置成功', badKey.code === 0, '来源 ' + (badKey.data && badKey.data.runtime.configSource));
+    check('保存后切换到真实模型', badKey.data && badKey.data.runtime.mock === false, '模型 ' + (badKey.data && badKey.data.runtime.model));
 
-  const test = await call('POST', '/admin/settings/llm/test', {}, true);
-  check('测试连接返回明确失败原因', test.code === 0 && test.data.ok === false, test.data && test.data.message);
+    const test = await call('POST', '/admin/settings/llm/test', {}, true);
+    check('测试连接返回明确失败原因', test.code === 0 && test.data.ok === false, test.data && test.data.message);
 
-  const reset = await call('POST', '/admin/settings/llm/reset', undefined, true);
-  check('恢复默认后回到降级模式', reset.data && reset.data.runtime.mock === true, '模式 ' + (reset.data && reset.data.runtime.provider));
-
+    const reset = await call('POST', '/admin/settings/llm/reset', undefined, true);
+    check('恢复默认后回到降级模式', reset.data && reset.data.runtime.mock === true, '模式 ' + (reset.data && reset.data.runtime.provider));
+  }
   console.log('\n=== 10. 登录限流（按 IP + 账号分桶）===');
   let limited = 0;
   for (let i = 0; i < 12; i += 1) {

@@ -195,7 +195,12 @@ async function save() {
 }
 
 async function reset() {
-  if (!(await confirmAction('确定清除后台保存的配置、回到 .env 里的默认值？'))) return;
+  // 必须说清楚 Key 会被**删掉且找不回来**：出于安全，保存后的 Key 永远不回显明文，
+  // 删掉就只能去服务商后台重新申请。原来只写「回到 .env 默认值」，用户不知道代价。
+  const tips = settings.value?.apiKeyConfigured
+    ? '⚠ 已保存的 API Key 会被一并删除，且**无法找回**（出于安全，Key 保存后不会回显明文）。需要你到服务商后台重新获取并填写。确定继续吗？'
+    : '确定清除后台保存的配置、回到 .env 里的默认值？';
+  if (!(await confirmAction(tips))) return;
   await runAction(async () => {
     fill(await api.resetLlmSettings());
     ElMessage.success('已恢复默认');
