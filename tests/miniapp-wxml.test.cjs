@@ -1,0 +1,110 @@
+/**
+ * WXML 静态检查（不需要微信开发者工具）。
+ *
+ * 小程序没法在 CI 里跑，但最容易出的三类错是纯静态可查的：
+ *   1. 模板里绑定的事件处理函数在 .js 里不存在 → 点击无反应
+ *   2. 标签没闭合 / 闭合错位 → 页面直接编译失败
+ *   3. 跳转的页面路径没在 app.json 里注册 → 跳转失败
+ * 这个脚本把这三类提前查出来。
+ */
+const fs = require('node:fs');
+const path = require('node:path');
+
+const ROOT = path.resolve(__dirname, '..', 'apps', 'miniapp');
+const appJson = JSON.parse(fs.readFileSync(path.join(ROOT, 'app.json'), 'utf8'));
+const pages = new Set(appJson.pages);
+const tabPages = new Set((appJson.tabBar && appJson.tabBar.list || []).map((t) => t.pagePath));
+
+const problems = [];
+const warnings = [];
+let filesChecked = 0;
+
+function walk(dir, out = []) {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) walk(full, out);
+    else out.push(full);
+  }
+  return out;
+}
+
+const files = walk(ROOT);
+const wxmlFiles = files.filter((f) => f.endsWith('.wxml'));
+
+const VOID_TAGS = new Set(['image', 'input', 'icon', 'progress', 'import', 'include', 'wxs', 'slot']);
+
+for (const wxml of wxmlFiles) {
+  filesChecked += 1;
+  const rel = path.relative(ROOT, wxml).split(path.sep).join('/');
+  const source = fs.readFileSync(wxml, 'utf8');
+  const jsPath = wxml.replace(/\.wxml$/, '.js');
+  const js = fs.existsSync(jsPath) ? fs.readFileSync(jsPath, 'utf8') : '';
+
+  // 1) 事件处理函数是否存在
+  const handlers = new Set();
+  for (const m of source.matchAll(/(?:bind|catch|capture-bind|capture-catch):?([a-zA-Z]+)\s*=\s*"([^"]+)"/g)) {
+    const expr = m[2].trim();
+    if (expr && !expr.includes('{{')) handlers.add(expr);
+  }
+  for (const handler of handlers) {
+    const pattern = new RegExp('(^|[^\\w.])' + handler + '\\s*[:(]', 'm');
+    if (!pattern.test(js)) problems.push(rel + '：绑定了 ' + handler + '，但对应 .js 里找不到这个方法');
+  }
+
+  // 2) 标签闭合
+  // 注意：标签可能跨行，必须在整个文件上匹配（之前按行匹配会把跨行标签误判成未闭合）
+  const stack = [];
+  const lineOf = (index) => source.slice(0, index).split('\n').length;
+  for (const m of source.matchAll(/<(\/?)([a-zA-Z][a-zA-Z0-9-]*)((?:"[^"]*"|'[^']*'|[^>"'])*?)(\/?)>/g)) {
+    const closing = m[1] === '/';
+    const tag = m[2];
+    const selfClosed = m[4] === '/' || VOID_TAGS.has(tag);
+    const line = lineOf(m.index);
+    if (closing) {
+      const last = stack.pop();
+      if (!last) problems.push(rel + ':' + line + '：多了一个 </' + tag + '>');
+      else if (last.tag !== tag) problems.push(rel + ':' + line + '：</' + tag + '> 与 <' + last.tag + '>（第 ' + last.line + ' 行）不匹配');
+    } else if (!selfClosed) {
+      stack.push({ tag, line });
+    }
+  }
+  for (const open of stack) problems.push(rel + ':' + open.line + '：<' + open.tag + '> 没有闭合');
+
+  // 3) wx:for 缺 wx:key
+  for (const m of source.matchAll(/<([a-zA-Z][a-zA-Z0-9-]*)((?:\"[^\"]*\"|'[^']*'|[^>\"'])*?)\/?>/g)) {
+    const tagText = m[0];
+    if (/wx:for\s*=/.test(tagText) && !/wx:key\s*=/.test(tagText)) {
+      warnings.push(rel + ':' + lineOf(m.index) + '：wx:for 未配 wx:key');
+    }
+  }
+
+  // 4) 跳转路径是否注册
+  for (const m of js.matchAll(/url:\s*'(\/pages\/[a-zA-Z0-9_\/-]+)/g)) {
+    const target = m[1].replace(/^\//, '');
+    if (!pages.has(target)) problems.push(rel.replace(/\.wxml$/, '.js') + '：跳转到未注册的页面 ' + m[1]);
+  }
+  for (const m of js.matchAll(/switchTab\(\{\s*url:\s*'(\/pages\/[a-zA-Z0-9_\/-]+)/g)) {
+    const target = m[1].replace(/^\//, '');
+    if (!tabPages.has(target)) problems.push(rel.replace(/\.wxml$/, '.js') + '：switchTab 目标不是 tabBar 页面 ' + m[1]);
+  }
+}
+
+// 5) app.json 里注册的页面文件是否齐全
+for (const page of appJson.pages) {
+  for (const ext of ['.js', '.json', '.wxml']) {
+    const f = path.join(ROOT, page + ext);
+    if (!fs.existsSync(f)) problems.push('app.json 注册的 ' + page + ' 缺少 ' + ext);
+  }
+}
+
+console.log('检查了 ' + filesChecked + ' 个 wxml 文件，' + appJson.pages.length + ' 个注册页面');
+if (warnings.length) {
+  console.log('\n警告 ' + warnings.length + ' 条：');
+  for (const w of [...new Set(warnings)]) console.log('  ! ' + w);
+}
+if (problems.length) {
+  console.log('\n错误 ' + problems.length + ' 条：');
+  for (const p of problems) console.log('  x ' + p);
+  process.exit(1);
+}
+console.log('\nRESULT: WXML 静态检查通过（事件绑定 / 标签闭合 / 页面跳转 均无问题）');

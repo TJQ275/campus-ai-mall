@@ -36,10 +36,6 @@ Page({
     wx.navigateTo({ url: '/pages/address/list' });
   },
 
-  goWallet() {
-    wx.navigateTo({ url: '/pages/mine/wallet' }).catch(() => {});
-  },
-
   async recharge() {
     const result = await new Promise((resolve) =>
       wx.showActionSheet({
