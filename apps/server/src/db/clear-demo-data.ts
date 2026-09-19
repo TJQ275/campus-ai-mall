@@ -55,8 +55,17 @@ async function main() {
   console.log(String(await count(db, 'app_user')).padStart(6), 'app_user (保留)');
 
   const total = Object.values(before).reduce((sum, n) => sum + n, 0);
-  if (!total) {
-    console.log('\n[clear] 这些表已经是空的，无需清理。');
+  const resetUsers = process.argv.includes('--reset-users');
+
+  // 交易表已经空了，且没有要求清账号 → 没什么可做的
+  if (!total && !resetUsers) {
+    const kept = await db.execute(sql`select count(*)::int as n from app_user where role <> 'admin'`);
+    const n = (kept as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0;
+    console.log('\n[clear] 交易数据已经是空的，无需清理。');
+    if (n) {
+      console.log('提示：还有 ' + n + ' 个非管理员账号。想让「用户数」也从 0 开始，加 --reset-users：');
+      console.log('      pnpm --filter @campus/server data:clear-demo --reset-users');
+    }
     await handle.close();
     return;
   }
@@ -80,6 +89,13 @@ async function main() {
     path.join(backupDir, '_user_balance.json'),
     JSON.stringify((balances as unknown as { rows: unknown[] }).rows, null, 2),
   );
+  if (resetUsers) {
+    const users = await db.execute(sql`select * from app_user where role <> 'admin'`);
+    fs.writeFileSync(
+      path.join(backupDir, '_users_to_delete.json'),
+      JSON.stringify((users as unknown as { rows: unknown[] }).rows, null, 2),
+    );
+  }
   console.log('\n[clear] 已备份到:', backupDir);
 
   // 删除：子表在前，避免外键报错
@@ -96,12 +112,37 @@ async function main() {
   console.log('  已重置 product.sales = 0');
   console.log('  已重置 app_user.balance_cents = 0');
 
+  // 可选：连测试/演示账号一起清掉。
+  // 每次用新 code 调 wx/login 都会建一个账号，联调几轮下来「用户数」就全是僵尸号。
+  // 管理员账号（role='admin'）永远保留。
+  if (resetUsers) {
+    const doomed = await db.execute(sql`select count(*)::int as n from app_user where role <> 'admin'`);
+    const n = (doomed as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0;
+    if (n) {
+      await db.execute(sql`delete from address where user_id in (select id from app_user where role <> 'admin')`);
+      await db.execute(sql`delete from cart_item where user_id in (select id from app_user where role <> 'admin')`);
+      await db.execute(sql`delete from user_profile where user_id in (select id from app_user where role <> 'admin')`);
+      await db.execute(sql`delete from notification where user_id in (select id from app_user where role <> 'admin')`);
+      await db.execute(sql`delete from login_log where user_id in (select id from app_user where role <> 'admin')`);
+      await db.execute(sql`delete from app_user where role <> 'admin'`);
+      console.log('  已删除 ' + n + ' 个非管理员账号（含其地址、购物车、画像、通知与登录日志）');
+    }
+  } else {
+    const kept = await db.execute(sql`select count(*)::int as n from app_user where role <> 'admin'`);
+    const n = (kept as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0;
+    if (n) {
+      console.log('\n提示：还有 ' + n + ' 个非管理员账号（演示/测试时自动创建的）。');
+      console.log('      想让「用户数」也从 0 开始，加 --reset-users 再跑一次：');
+      console.log('      pnpm --filter @campus/server data:clear-demo --reset-users');
+    }
+  }
+
   console.log('\n--- 清理后 ---');
   for (const table of CLEAR_TABLES) {
     console.log(String(await count(db, table)).padStart(6), table);
   }
   console.log(String(await count(db, 'product')).padStart(6), 'product  (保留)');
-  console.log(String(await count(db, 'app_user')).padStart(6), 'app_user (保留)');
+  console.log(String(await count(db, 'app_user')).padStart(6), 'app_user (保留管理员)');
   console.log(String(await count(db, 'review')).padStart(6), 'review   (保留)');
   console.log(String(await count(db, 'ai_knowledge')).padStart(6), 'ai_knowledge (保留)');
 

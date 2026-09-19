@@ -67,12 +67,13 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 // 只引入用到的图表与组件，避免把整个 echarts 打进 Dashboard chunk
 import * as echarts from 'echarts/core';
 import { BarChart, LineChart, PieChart } from 'echarts/charts';
-import { GridComponent, LegendComponent, TooltipComponent } from 'echarts/components';
+import { GridComponent, LegendComponent, TitleComponent, TooltipComponent } from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import { api, PAY_CHANNEL_LABEL, yuan, type AiStats, type DashboardData } from '../api';
 import { reportError } from '../composables/async';
 
-echarts.use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TooltipComponent, CanvasRenderer]);
+// TitleComponent 是「空数据提示」用的：按需引入模式下没注册它，setOption 里的 title 会被静默忽略
+echarts.use([BarChart, LineChart, PieChart, GridComponent, LegendComponent, TitleComponent, TooltipComponent, CanvasRenderer]);
 
 type ChartInstance = ReturnType<typeof echarts.init>;
 
@@ -172,25 +173,29 @@ function renderCharts() {
 
   const categoryChart = echarts.init(categoryRef.value);
   const hasCategorySales = categorySales.value.some((c) => c.qty > 0);
-  categoryChart.setOption({
-    tooltip: { trigger: 'axis' },
-    grid: { left: 8, right: 24, top: 16, bottom: 8, containLabel: true },
-    xAxis: { type: 'value', minInterval: 1 },
-    yAxis: { type: 'category', data: categorySales.value.map((c) => c.name).reverse() },
-    series: [
-      {
-        type: 'bar',
-        barMaxWidth: 20,
-        itemStyle: { color: '#67c23a' },
-        data: categorySales.value.map((c) => c.qty).reverse(),
-      },
-    ],
-    // 没有任何销量时不要画一排空坐标轴，直接给一句人话
-    ...(hasCategorySales ? {} : emptyState('还没有销量数据')),
-  });
+  categoryChart.setOption(
+    hasCategorySales
+      ? {
+          tooltip: { trigger: 'axis' },
+          grid: { left: 8, right: 24, top: 16, bottom: 8, containLabel: true },
+          xAxis: { type: 'value', minInterval: 1 },
+          yAxis: { type: 'category', data: categorySales.value.map((c) => c.name).reverse() },
+          series: [
+            {
+              type: 'bar',
+              barMaxWidth: 20,
+              itemStyle: { color: '#67c23a' },
+              data: categorySales.value.map((c) => c.qty).reverse(),
+            },
+          ],
+        }
+      : // 没有销量时不要把空坐标轴画出来，否则提示文字会和分类名挤在一起
+        emptyState('还没有销量数据'),
+  );
 
   const channelChart = echarts.init(channelRef.value);
-  // 没有订单时饼图会渲染成一个灰色空环，看起来像坏了
+  // 没有订单时：ECharts 饼图默认会画一个浅灰色的「空数据圈」，看起来像页面坏了，
+  // 所以关掉它、改成一句提示
   const hasChannels = payChannels.value.length > 0;
   channelChart.setOption({
     tooltip: { trigger: 'item' },
@@ -198,6 +203,7 @@ function renderCharts() {
       {
         type: 'pie',
         radius: ['40%', '68%'],
+        showEmptyCircle: false,
         data: payChannels.value.map((c) => ({ name: PAY_CHANNEL_LABEL[c.channel] || c.channel, value: c.count })),
       },
     ],
