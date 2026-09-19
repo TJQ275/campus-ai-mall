@@ -18,13 +18,14 @@ jobs:
   check:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
+      # 不要在这里写 version：package.json 里已经有 packageManager: pnpm@11.5.2，
+      # 两处同时指定会让 action 直接报错 Multiple versions of pnpm specified，
+      # 而且这个错误发生在装依赖之前，后面所有步骤都不会跑。
+      - uses: pnpm/action-setup@v6
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -84,7 +85,7 @@ jobs:
 
       # 重排服务的测试是纯算法（BM25 / RRF），但补一条「应用能导入」的冒烟检查，
       # 否则依赖装漏了、路由写错了，单元测试照样全绿。
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: '3.12'
 
@@ -110,7 +111,7 @@ jobs:
 
       - name: 上传评测报告
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: eval-report
           path: apps/server/.eval/
