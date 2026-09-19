@@ -58,8 +58,11 @@ async function main() {
   check('商品检索', search.code === 0 && search.data.total > 0, '命中 ' + search.data.total + ' 条');
   const cheap = await call('GET', '/products?kind=snack&priceMax=5&sort=sales');
   check('价格过滤（元→分）', cheap.code === 0, '5 元以内 ' + cheap.data.total + ' 条');
-  const snack = (await call('GET', '/products?kind=snack&sort=sales&pageSize=1')).data.list[0];
-  const book = (await call('GET', '/products?kind=book&sort=sales&pageSize=1')).data.list[0];
+  // 只挑有货的商品：验收脚本会被反复执行，买过的商品库存会减少（二手书库存本来就是 1）
+  const snackList = (await call('GET', '/products?kind=snack&sort=sales&pageSize=10')).data.list;
+  const bookList = (await call('GET', '/products?kind=book&sort=sales&pageSize=10')).data.list;
+  const snack = snackList.find((p) => p.stock >= 2) || snackList[0];
+  const book = bookList.find((p) => p.stock >= 1) || bookList[0];
   const detail = await call('GET', '/products/' + book.id);
   check('商品详情', detail.code === 0, detail.data.title + ' / SKU ' + detail.data.skus.length + ' 个');
   const reviewList = await call('GET', '/products/' + snack.id + '/reviews');
@@ -70,10 +73,13 @@ async function main() {
   check('新增地址', addr.code === 0, 'id=' + addr.data.id);
   const recharge = await call('POST', '/wallet/recharge', { amountCents: 10000 });
   check('模拟充值', recharge.code === 0, '余额 ' + (recharge.data.balanceCents / 100) + ' 元');
-  await call('POST', '/cart', { productId: snack.id, quantity: 2 });
-  await call('POST', '/cart', { productId: book.id, quantity: 1 });
+  const addSnack = await call('POST', '/cart', { productId: snack.id, quantity: 2 });
+  const addBook = await call('POST', '/cart', { productId: book.id, quantity: 1 });
+  if (addSnack.code !== 0 || addBook.code !== 0) {
+    check('加入购物车', false, '加购失败：' + (addSnack.message || addBook.message));
+  }
   const cart = await call('GET', '/cart');
-  check('购物车', cart.code === 0 && cart.data.totalQuantity === 3, cart.data.totalCount + ' 种 / ' + cart.data.totalQuantity + ' 件');
+  check('购物车', cart.code === 0 && cart.data.totalQuantity === 3, cart.data.totalCount + ' 种 / ' + cart.data.totalQuantity + ' 件（' + snack.title + ' ×2 + 1）');
   const preview = await call('GET', '/orders/preview');
   check('结算预览', preview.code === 0, '应付 ' + (preview.data.payCents / 100) + ' 元');
   const order = await call('POST', '/orders', { addressId: addr.data.id, remark: '验收' });
@@ -128,6 +134,7 @@ async function main() {
     process.exit(1);
   }
   console.log('RESULT: 全链路验收通过');
+  console.log('提示：验收会产生真实订单并扣减库存，反复执行后想恢复演示数据请跑 pnpm db:reset');
 }
 
 main().catch((err) => {
