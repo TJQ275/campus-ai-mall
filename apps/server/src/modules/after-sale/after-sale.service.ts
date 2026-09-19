@@ -1,4 +1,5 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { randomInt } from 'node:crypto';
 import { and, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
@@ -14,7 +15,13 @@ export interface ApplyAfterSaleInput {
   source?: 'miniapp' | 'ai';
 }
 
-const afterSaleNo = () => 'A' + Date.now() + Math.floor(Math.random() * 900 + 100);
+/** 售后单号：日期 + 10 位随机数（同秒并发不会再碰撞） */
+const afterSaleNo = () => {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const day = String(d.getFullYear()) + pad(d.getMonth() + 1) + pad(d.getDate());
+  return 'A' + day + String(randomInt(0, 10_000_000_000)).padStart(10, '0');
+};
 
 @Injectable()
 export class AfterSaleService {
@@ -28,27 +35,35 @@ export class AfterSaleService {
     const orderRow = (await this.db.select().from(orders).where(eq(orders.id, item.orderId)).limit(1))[0];
     if (!orderRow || orderRow.userId !== userId) throw new NotFoundException('订单不存在');
     if (!['paid', 'shipped', 'finished'].includes(orderRow.status)) throw new BadRequestException('该订单当前状态不支持申请售后');
-    if (item.refundStatus !== 'none') throw new BadRequestException('该商品已有售后单在处理中');
 
-    const created = await this.db
-      .insert(afterSales)
-      .values({
-        afterSaleNo: afterSaleNo(),
-        orderId: orderRow.id,
-        orderItemId: item.id,
-        userId,
-        type: input.type ?? 'refund',
-        reason: input.reason,
-        description: input.description ?? null,
-        images: input.images ?? [],
-        amountCents: item.priceCents * item.quantity,
-        status: 'pending',
-        source: input.source ?? 'miniapp',
-      })
-      .returning();
+    // 抢占订单行：把 refund_status 从 none 改成 pending 的条件更新，只有一次能成功。
+    // 之前是「先 select 判断再 insert」，并发重复提交会开出两张售后单。
+    return this.db.transaction(async (tx) => {
+      const claimed = await tx
+        .update(orderItems)
+        .set({ refundStatus: 'pending' })
+        .where(and(eq(orderItems.id, item.id), eq(orderItems.refundStatus, 'none')))
+        .returning({ id: orderItems.id });
+      if (!claimed[0]) throw new BadRequestException('该商品已有售后单在处理中');
 
-    await this.db.update(orderItems).set({ refundStatus: 'pending' }).where(eq(orderItems.id, item.id));
-    return created[0];
+      const created = await tx
+        .insert(afterSales)
+        .values({
+          afterSaleNo: afterSaleNo(),
+          orderId: orderRow.id,
+          orderItemId: item.id,
+          userId,
+          type: input.type ?? 'refund',
+          reason: input.reason,
+          description: input.description ?? null,
+          images: input.images ?? [],
+          amountCents: item.priceCents * item.quantity,
+          status: 'pending',
+          source: input.source ?? 'miniapp',
+        })
+        .returning();
+      return created[0];
+    });
   }
 
   async list(userId: number, status?: string) {
@@ -83,38 +98,47 @@ export class AfterSaleService {
   /**
    * 审核售后：同意则退款入账 + 回滚库存与销量。
    * 这条链路同时被「管理端按钮」和「AI 客服代提交后的审核」复用。
+   *
+   * 两条分支都在事务里用条件更新抢占售后单（WHERE status='pending'），
+   * 重复点击审核不会出现「退两次款」。
    */
   async audit(id: number, input: { approve: boolean; remark?: string; adminId?: number }) {
     const found = await this.db.select().from(afterSales).where(eq(afterSales.id, id)).limit(1);
     const record = found[0];
     if (!record) throw new NotFoundException('售后单不存在');
-    if (record.status !== 'pending') throw new BadRequestException('该售后单已处理');
 
     if (!input.approve) {
-      const rejected = await this.db
-        .update(afterSales)
-        .set({ status: 'rejected', auditRemark: input.remark ?? null, auditedBy: input.adminId ?? null, auditedAt: new Date() })
-        .where(eq(afterSales.id, id))
-        .returning();
-      await this.db.update(orderItems).set({ refundStatus: 'rejected' }).where(eq(orderItems.id, record.orderItemId));
-      return rejected[0];
+      return this.db.transaction(async (tx) => {
+        const rejected = await tx
+          .update(afterSales)
+          .set({ status: 'rejected', auditRemark: input.remark ?? null, auditedBy: input.adminId ?? null, auditedAt: new Date() })
+          .where(and(eq(afterSales.id, id), eq(afterSales.status, 'pending')))
+          .returning();
+        if (!rejected[0]) throw new BadRequestException('该售后单已处理');
+        await tx.update(orderItems).set({ refundStatus: 'rejected' }).where(eq(orderItems.id, record.orderItemId));
+        return rejected[0];
+      });
     }
 
     return this.db.transaction(async (tx) => {
       const updated = await tx
         .update(afterSales)
         .set({ status: 'refunded', auditRemark: input.remark ?? '审核通过', auditedBy: input.adminId ?? null, auditedAt: new Date() })
-        .where(eq(afterSales.id, id))
+        .where(and(eq(afterSales.id, id), eq(afterSales.status, 'pending')))
         .returning();
+      if (!updated[0]) throw new BadRequestException('该售后单已处理');
 
       await tx.update(orderItems).set({ refundStatus: 'refunded' }).where(eq(orderItems.id, record.orderItemId));
 
-      const userRow = (await tx.select().from(users).where(eq(users.id, record.userId)).limit(1))[0];
-      if (userRow) {
-        const balanceAfter = userRow.balanceCents + record.amountCents;
-        await tx.update(users).set({ balanceCents: balanceAfter }).where(eq(users.id, record.userId));
+      // 退款入账：原子自增，避免与用户同时下单支付互相覆盖
+      const credited = await tx
+        .update(users)
+        .set({ balanceCents: sql`${users.balanceCents} + ${record.amountCents}` })
+        .where(eq(users.id, record.userId))
+        .returning({ balanceCents: users.balanceCents });
+      if (credited[0]) {
         await tx.insert(walletLogs).values({
-          userId: record.userId, type: 'refund', amountCents: record.amountCents, balanceAfter,
+          userId: record.userId, type: 'refund', amountCents: record.amountCents, balanceAfter: credited[0].balanceCents,
           refType: 'after_sale', refId: record.id, remark: '售后退款 ' + record.afterSaleNo,
         });
       }

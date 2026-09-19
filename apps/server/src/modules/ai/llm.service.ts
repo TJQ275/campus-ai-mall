@@ -1,35 +1,62 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { MockProvider } from './provider/mock.provider.js';
 import { OpenAiCompatibleProvider } from './provider/openai-compatible.provider.js';
 import type { LlmProvider } from './provider/types.js';
+import { LlmConfigService, type LlmRuntimeConfig } from './llm-config.service.js';
 
 /**
  * 模型选择的唯一入口。
- * 配置了 LLM_API_KEY 就走真实模型，否则自动使用 MockProvider —— 这是「无 Key 也能演示」的开关。
+ *
+ * 配置来源是 LlmConfigService（数据库 > .env）：配了 API Key 就走真实模型，
+ * 否则自动用 MockProvider —— 这是「无 Key 也能演示」的开关。
+ * 后台改完配置会刷新快照，这里按 signature 惰性重建 provider，所以不用重启服务。
  */
 @Injectable()
-export class LlmService {
+export class LlmService implements OnModuleInit {
   private readonly logger = new Logger(LlmService.name);
-  private readonly provider: LlmProvider;
+  private provider!: LlmProvider;
+  private providerSignature = '';
 
-  constructor() {
-    const apiKey = process.env.LLM_API_KEY?.trim();
-    if (apiKey) {
-      this.provider = new OpenAiCompatibleProvider({
-        baseUrl: process.env.LLM_BASE_URL ?? 'https://api.deepseek.com/v1',
-        apiKey,
-        model: process.env.LLM_MODEL ?? 'deepseek-chat',
-        embeddingModel: process.env.LLM_EMBEDDING_MODEL,
-        timeoutMs: Number(process.env.LLM_TIMEOUT_MS ?? 60000),
-      });
-      this.logger.log('AI 使用真实模型: ' + this.provider.model);
+  constructor(private readonly config: LlmConfigService) {
+    this.provider = this.build(this.config.current);
+  }
+
+  async onModuleInit(): Promise<void> {
+    await this.init();
+  }
+
+  /**
+   * 读取配置并装配 provider。
+   * Nest 启动时由 onModuleInit 调用；独立脚本（ai:embed / demo:prepare）手动调用。
+   */
+  async init(): Promise<void> {
+    await this.config.load();
+    this.provider = this.build(this.config.current);
+    if (this.provider.isMock) {
+      this.logger.warn('未配置大模型 Key，AI 走 MockProvider 规则降级（功能完整，话术为模板）');
     } else {
-      this.provider = new MockProvider();
-      this.logger.warn('未配置 LLM_API_KEY，AI 走 MockProvider 规则降级（功能完整，话术为模板）');
+      this.logger.log('AI 使用真实模型: ' + this.provider.model);
     }
   }
 
+  private build(config: LlmRuntimeConfig): LlmProvider {
+    this.providerSignature = this.config.signature;
+    if (!config.apiKey) return new MockProvider();
+    return new OpenAiCompatibleProvider({
+      baseUrl: config.baseUrl,
+      apiKey: config.apiKey,
+      model: config.model,
+      embeddingModel: config.embeddingModel,
+      timeoutMs: config.timeoutMs,
+    });
+  }
+
   get current(): LlmProvider {
+    // 后台改过配置 → 下次取用时自动换实例
+    if (this.config.signature !== this.providerSignature) {
+      this.logger.log('AI 配置已变更，重建模型客户端');
+      this.provider = this.build(this.config.current);
+    }
     return this.provider;
   }
 
@@ -39,18 +66,26 @@ export class LlmService {
   }
 
   status() {
+    const config = this.config.current;
     return {
       provider: this.provider.name,
       model: this.provider.model,
       mock: this.provider.isMock,
-      baseUrl: this.provider.isMock ? null : (process.env.LLM_BASE_URL ?? null),
-      embedding: process.env.LLM_EMBEDDING_MODEL ? 'enabled' : 'disabled',
+      baseUrl: this.provider.isMock ? null : config.baseUrl,
+      embedding: config.embeddingModel ? 'enabled' : 'disabled',
+      /** 配置来自 .env 还是后台保存的数据库配置 */
+      configSource: this.config.isOverridden('apiKey') ? 'admin' : 'env',
     };
+  }
+
+  /** 供后台「测试连接」与实际调用复用的一份配置 */
+  get runtimeConfig(): LlmRuntimeConfig {
+    return this.config.current;
   }
 
   /** 是否具备识图能力（需要单独的视觉模型） */
   get visionEnabled(): boolean {
-    return Boolean(process.env.LLM_VISION_MODEL) && !this.provider.isMock;
+    return Boolean(this.config.current.visionModel) && !this.current.isMock;
   }
 
   /**
@@ -60,14 +95,19 @@ export class LlmService {
    */
   async describeImage(imageUrl: string): Promise<{ title: string; keywords: string[]; raw: string } | null> {
     if (!this.visionEnabled) return null;
-    const baseUrl = (process.env.LLM_BASE_URL ?? 'https://api.deepseek.com/v1').replace(/\/+$/, '');
+    const config = this.config.current;
+    const baseUrl = config.baseUrl.replace(/\/+$/, '');
     const absolute = imageUrl.startsWith('http') ? imageUrl : (process.env.PUBLIC_BASE_URL ?? 'http://localhost:3100') + imageUrl;
+    // 视觉请求同样要有超时，否则上游卡住会一直占着这个请求
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), config.timeoutMs);
     try {
       const response = await fetch(baseUrl + '/chat/completions', {
         method: 'POST',
-        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + (process.env.LLM_API_KEY ?? '') },
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + config.apiKey },
+        signal: controller.signal,
         body: JSON.stringify({
-          model: process.env.LLM_VISION_MODEL,
+          model: config.visionModel,
           messages: [
             {
               role: 'user',
@@ -84,11 +124,50 @@ export class LlmService {
       const text = json.choices?.[0]?.message?.content ?? '';
       const start = text.indexOf('{');
       const end = text.lastIndexOf('}');
+      if (start < 0 || end <= start) throw new Error('视觉模型没有返回 JSON');
       const parsed = JSON.parse(text.slice(start, end + 1)) as { title?: string; keywords?: string[] };
       return { title: String(parsed.title ?? ''), keywords: (parsed.keywords ?? []).map(String), raw: text };
     } catch (error) {
       this.logger.warn('识图失败: ' + (error as Error).message);
       return null;
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * 后台「测试连接」：发一个最小请求验证 Key / Base URL / 模型名是否可用。
+   * 对不懂技术的买家来说，这一颗按钮比任何文档都有用。
+   */
+  async testConnection(override?: Partial<LlmRuntimeConfig>): Promise<{ ok: boolean; message: string; model?: string; latencyMs?: number }> {
+    const config = { ...this.config.current, ...override };
+    if (!config.apiKey) return { ok: false, message: '还没有填写 API Key' };
+    const started = Date.now();
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), Math.min(config.timeoutMs, 20000));
+    try {
+      const response = await fetch(config.baseUrl.replace(/\/+$/, '') + '/chat/completions', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: 'Bearer ' + config.apiKey },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: config.model,
+          messages: [{ role: 'user', content: '回复两个字：正常' }],
+          max_tokens: 8,
+        }),
+      });
+      const text = await response.text();
+      if (!response.ok) {
+        return { ok: false, message: '模型接口返回 ' + response.status + '：' + text.slice(0, 200) };
+      }
+      const json = JSON.parse(text) as { choices?: unknown[] };
+      if (!json.choices?.length) return { ok: false, message: '接口通了，但返回内容不符合 OpenAI 格式：' + text.slice(0, 200) };
+      return { ok: true, message: '连接成功，模型可用', model: config.model, latencyMs: Date.now() - started };
+    } catch (error) {
+      const message = (error as Error).name === 'AbortError' ? '连接超时，检查 Base URL 或网络' : (error as Error).message;
+      return { ok: false, message: '连接失败：' + message };
+    } finally {
+      clearTimeout(timer);
     }
   }
 }

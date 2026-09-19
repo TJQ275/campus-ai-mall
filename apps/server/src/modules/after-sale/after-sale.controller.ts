@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AfterSaleService, type ApplyAfterSaleInput } from './after-sale.service.js';
+import { ApplyAfterSaleRequest } from '@campus/shared';
+import { AfterSaleService } from './after-sale.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { Roles, RolesGuard } from '../../common/guards/roles.guard.js';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator.js';
 
 @ApiTags('售后')
@@ -13,7 +15,7 @@ export class AfterSaleController {
 
   @Post()
   @ApiOperation({ summary: '申请售后（AI 客服代提交时 source=ai）' })
-  apply(@CurrentUser() user: AuthUser, @Body() body: ApplyAfterSaleInput) {
+  apply(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(ApplyAfterSaleRequest)) body: ApplyAfterSaleRequest) {
     return this.afterSale.apply(user.sub, body);
   }
 
@@ -55,6 +57,10 @@ export class AdminAfterSaleController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: { approve: boolean; remark?: string },
   ) {
-    return this.afterSale.audit(id, { approve: body.approve, remark: body.remark, adminId: user.sub });
+    return this.afterSale.audit(id, {
+      approve: body.approve === true,
+      remark: body.remark ? String(body.remark).slice(0, 200) : undefined,
+      adminId: user.sub,
+    });
   }
 }

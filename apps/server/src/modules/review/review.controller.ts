@@ -1,8 +1,10 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { ReviewService, type CreateReviewInput } from './review.service.js';
+import { ReviewRequest } from '@campus/shared';
+import { ReviewService } from './review.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { Roles, RolesGuard } from '../../common/guards/roles.guard.js';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator.js';
 
 @ApiTags('评价')
@@ -19,7 +21,7 @@ export class ReviewController {
   @Post('reviews')
   @UseGuards(JwtAuthGuard)
   @ApiOperation({ summary: '发表评价（提交后自动刷新 AI 摘要）' })
-  create(@CurrentUser() user: AuthUser, @Body() body: CreateReviewInput) {
+  create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(ReviewRequest)) body: ReviewRequest) {
     return this.review.create(user.sub, body);
   }
 }

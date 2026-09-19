@@ -1,9 +1,10 @@
 import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
-import { and, desc, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { randomInt } from 'node:crypto';
+import { and, desc, eq, gte, ilike, inArray, or, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
 import {
-  addresses, cartItems, orderItems, orders, payments, products, userBehaviors, users, walletLogs,
+  addresses, afterSales, cartItems, orderItems, orders, payments, products, userBehaviors, users, walletLogs,
 } from '../../db/schema/index.js';
 
 export interface CreateOrderInput {
@@ -14,11 +15,16 @@ export interface CreateOrderInput {
   conversationId?: number;
 }
 
+/**
+ * 订单号：日期 + 10 位随机数。
+ * 早期实现是「秒级时间戳 + 4 位随机」（同秒仅 9000 种），并发下单有碰撞概率，
+ * 而 order_no 上有唯一索引 —— 撞上就是一次 500。按天分段的 10 位随机空间是 10^10。
+ */
 const orderNo = () => {
   const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, '0');
-  const stamp = String(d.getFullYear()) + pad(d.getMonth() + 1) + pad(d.getDate()) + pad(d.getHours()) + pad(d.getMinutes()) + pad(d.getSeconds());
-  return 'C' + stamp + Math.floor(Math.random() * 9000 + 1000);
+  const pad = (n: number, width = 2) => String(n).padStart(width, '0');
+  const day = String(d.getFullYear()) + pad(d.getMonth() + 1) + pad(d.getDate());
+  return 'C' + day + String(randomInt(0, 10_000_000_000)).padStart(10, '0');
 };
 
 @Injectable()
@@ -107,21 +113,54 @@ export class OrderService {
     return this.detail(userId, created.id);
   }
 
-  /** 模拟支付：微信 / 支付宝 / 余额。余额支付会真实扣减并记流水 */
+  /**
+   * 模拟支付：微信 / 支付宝 / 余额。余额支付会真实扣减并记流水。
+   *
+   * 幂等靠「事务内的条件更新抢占」实现：只有把订单从 pending_pay 改到 paid 的那一次
+   * 更新能拿到返回行，并发重复支付（用户连点、网络重试）会在数据库行锁上排队，
+   * 后到的请求拿不到行、直接失败。所有扣减都带条件，扣不动就整体回滚。
+   */
   async pay(userId: number, id: number, channel: 'wechat' | 'alipay' | 'balance') {
-    const found = await this.db.select().from(orders).where(and(eq(orders.id, id), eq(orders.userId, userId))).limit(1);
-    const order = found[0];
-    if (!order) throw new NotFoundException('订单不存在');
-    if (order.status !== 'pending_pay') throw new BadRequestException('订单当前状态不可支付');
-
     await this.db.transaction(async (tx) => {
+      // 1) 抢占订单：并发时只有一个请求能把 pending_pay 改成 paid
+      const claimed = await tx
+        .update(orders)
+        .set({ status: 'paid', payStatus: 'paid', payChannel: channel, paidAt: new Date(), updatedAt: new Date() })
+        .where(and(eq(orders.id, id), eq(orders.userId, userId), eq(orders.status, 'pending_pay')))
+        .returning();
+      const order = claimed[0];
+      if (!order) {
+        // 区分「不存在」和「状态不对」，给前端准确提示（重复支付应提示已支付，而非报错）
+        const existing = (
+          await tx.select({ status: orders.status }).from(orders).where(and(eq(orders.id, id), eq(orders.userId, userId))).limit(1)
+        )[0];
+        if (!existing) throw new NotFoundException('订单不存在');
+        throw new BadRequestException(existing.status === 'paid' ? '订单已支付，请勿重复支付' : '订单当前状态不可支付');
+      }
+
+      // 2) 扣库存 / 加销量：条件更新，库存不足时返回 0 行 → 抛错回滚整个事务
+      const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, order.id));
+      for (const item of items) {
+        const deducted = await tx
+          .update(products)
+          .set({ stock: sql`${products.stock} - ${item.quantity}`, sales: sql`${products.sales} + ${item.quantity}` })
+          .where(and(eq(products.id, item.productId), gte(products.stock, item.quantity)))
+          .returning({ id: products.id });
+        if (!deducted[0]) {
+          throw new BadRequestException('「' + item.titleSnapshot + '」库存不足，请取消订单后重新下单');
+        }
+      }
+
+      // 3) 余额扣减：条件更新，余额不足时数据库层面就拒绝，不会出现读改写覆盖
       if (channel === 'balance') {
-        const userRow = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
-        if (!userRow || userRow.balanceCents < order.payCents) throw new BadRequestException('余额不足，请先充值或换用其他支付方式');
-        const balanceAfter = userRow.balanceCents - order.payCents;
-        await tx.update(users).set({ balanceCents: balanceAfter }).where(eq(users.id, userId));
+        const paid = await tx
+          .update(users)
+          .set({ balanceCents: sql`${users.balanceCents} - ${order.payCents}` })
+          .where(and(eq(users.id, userId), gte(users.balanceCents, order.payCents)))
+          .returning({ balanceCents: users.balanceCents });
+        if (!paid[0]) throw new BadRequestException('余额不足，请先充值或换用其他支付方式');
         await tx.insert(walletLogs).values({
-          userId, type: 'consume', amountCents: -order.payCents, balanceAfter,
+          userId, type: 'consume', amountCents: -order.payCents, balanceAfter: paid[0].balanceCents,
           refType: 'order', refId: order.id, remark: '订单支付 ' + order.orderNo,
         });
       }
@@ -130,16 +169,6 @@ export class OrderService {
         orderId: order.id, channel, amountCents: order.payCents, status: 'success',
         tradeNo: channel.toUpperCase() + Date.now(), paidAt: new Date(),
       });
-      await tx.update(orders).set({ status: 'paid', payStatus: 'paid', payChannel: channel, paidAt: new Date(), updatedAt: new Date() }).where(eq(orders.id, order.id));
-
-      // 扣库存、加销量：放在支付成功之后，未支付订单取消时无需回滚
-      const items = await tx.select().from(orderItems).where(eq(orderItems.orderId, order.id));
-      for (const item of items) {
-        await tx
-          .update(products)
-          .set({ stock: sql`greatest(${products.stock} - ${item.quantity}, 0)`, sales: sql`${products.sales} + ${item.quantity}` })
-          .where(eq(products.id, item.productId));
-      }
     });
 
     return this.detail(userId, id);
@@ -165,11 +194,66 @@ export class OrderService {
     return updated[0];
   }
 
-  async list(userId: number, status?: string) {
+  /** 最近订单（给 AI 工具用）：默认只取最近 20 笔，避免上下文与响应体无限膨胀 */
+  async list(userId: number, status?: string, limit = 20) {
+    const rows = await this.recentOrders(userId, status, Math.min(Math.max(1, limit), 50));
+    return this.withItems(rows);
+  }
+
+  /** 小程序订单列表：分页 */
+  async pageForUser(userId: number, params: { status?: string; page?: number; pageSize?: number }) {
+    const page = Math.max(1, params.page ?? 1);
+    const pageSize = Math.min(50, Math.max(1, params.pageSize ?? 10));
+    const conditions = [eq(orders.userId, userId)];
+    if (params.status && params.status !== 'all') conditions.push(eq(orders.status, params.status));
+    const where = and(...conditions);
+    const rows = await this.db
+      .select()
+      .from(orders)
+      .where(where)
+      .orderBy(desc(orders.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize);
+    const counted = await this.db.select({ total: sql<number>`count(*)::int` }).from(orders).where(where);
+    return { list: await this.withItems(rows), total: counted[0]?.total ?? 0, page, pageSize };
+  }
+
+  /**
+   * 各状态订单数：给「我的」页面的角标用。
+   * 之前是客户端拉全量订单再在本地数，订单越多越慢，这里改成一次聚合查询。
+   */
+  async summary(userId: number) {
+    const rows = await this.db
+      .select({ status: orders.status, count: sql<number>`count(*)::int` })
+      .from(orders)
+      .where(eq(orders.userId, userId))
+      .groupBy(orders.status);
+    const counts: Record<string, number> = {};
+    let total = 0;
+    for (const row of rows) {
+      counts[row.status] = row.count;
+      total += row.count;
+    }
+    const refunding = await this.db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(afterSales)
+      .where(and(eq(afterSales.userId, userId), inArray(afterSales.status, ['pending', 'approved'])));
+    return {
+      all: total,
+      pending_pay: counts.pending_pay ?? 0,
+      paid: counts.paid ?? 0,
+      shipped: counts.shipped ?? 0,
+      finished: counts.finished ?? 0,
+      cancelled: counts.cancelled ?? 0,
+      /** 售后处理中（不在订单状态里，单独统计） */
+      refunding: refunding[0]?.total ?? 0,
+    };
+  }
+
+  private recentOrders(userId: number, status?: string, limit = 20) {
     const conditions = [eq(orders.userId, userId)];
     if (status && status !== 'all') conditions.push(eq(orders.status, status));
-    const rows = await this.db.select().from(orders).where(and(...conditions)).orderBy(desc(orders.createdAt));
-    return this.withItems(rows);
+    return this.db.select().from(orders).where(and(...conditions)).orderBy(desc(orders.createdAt)).limit(limit);
   }
 
   async detail(userId: number, id: number) {

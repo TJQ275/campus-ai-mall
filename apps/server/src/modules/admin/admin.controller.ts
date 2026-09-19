@@ -1,9 +1,11 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
+import { AdminKnowledgeRequest, AdminProductSaveRequest } from '@campus/shared';
 import { AdminAiService } from './admin-ai.service.js';
 import { AdminShopService } from './admin-shop.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { Roles, RolesGuard } from '../../common/guards/roles.guard.js';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 
 @ApiTags('管理端-AI')
 @Controller('admin/ai')
@@ -70,13 +72,16 @@ export class AdminKnowledgeController {
 
   @Post()
   @ApiOperation({ summary: '新增知识条目（自动补向量）' })
-  create(@Body() body: { scene?: string; title: string; source?: string; content: string }) {
+  create(@Body(new ZodValidationPipe(AdminKnowledgeRequest)) body: AdminKnowledgeRequest) {
     return this.adminAi.knowledgeCreate(body);
   }
 
   @Patch(':id')
   @ApiOperation({ summary: '修改知识条目' })
-  update(@Param('id', ParseIntPipe) id: number, @Body() body: Record<string, unknown>) {
+  update(
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new ZodValidationPipe(AdminKnowledgeRequest.partial())) body: Partial<AdminKnowledgeRequest>,
+  ) {
     return this.adminAi.knowledgeUpdate(id, body);
   }
 
@@ -111,14 +116,14 @@ export class AdminShopController {
 
   @Post('products')
   @ApiOperation({ summary: '新增或更新商品（带 id 即更新）' })
-  productSave(@Body() body: Record<string, unknown> & { id?: number }) {
+  productSave(@Body(new ZodValidationPipe(AdminProductSaveRequest)) body: AdminProductSaveRequest) {
     return this.shop.productSave(body);
   }
 
   @Post('products/:id/status')
   @ApiOperation({ summary: '上架 / 下架' })
   productToggle(@Param('id', ParseIntPipe) id: number, @Body() body: { status: 'on' | 'off' }) {
-    return this.shop.productToggle(id, body.status);
+    return this.shop.productToggle(id, body.status === 'off' ? 'off' : 'on');
   }
 
   @Get('categories')
@@ -151,6 +156,6 @@ export class AdminShopController {
   @Post('users/:id/balance')
   @ApiOperation({ summary: '调整余额（单位：分，可为负）' })
   adjustBalance(@Param('id', ParseIntPipe) id: number, @Body() body: { amountCents: number; remark?: string }) {
-    return this.shop.userAdjustBalance(id, Number(body.amountCents), body.remark ?? '管理员调整');
+    return this.shop.userAdjustBalance(id, Number(body.amountCents), String(body.remark ?? '管理员调整'));
   }
 }

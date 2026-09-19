@@ -1,4 +1,4 @@
-import { boolean, index, integer, jsonb, pgTable, serial, smallint, text, timestamp, varchar } from 'drizzle-orm/pg-core';
+import { boolean, index, integer, jsonb, pgTable, serial, smallint, text, timestamp, uniqueIndex, varchar } from 'drizzle-orm/pg-core';
 import { createdAt, money, updatedAt } from './_shared.js';
 import { products, productSkus } from './catalog.js';
 import { users } from './user.js';
@@ -14,7 +14,11 @@ export const cartItems = pgTable('cart_item', {
   source: varchar('source', { length: 10 }).notNull().default('miniapp'),
   createdAt,
   updatedAt,
-}, (t) => [index('idx_cart_user').on(t.userId)]);
+}, (t) => [
+  index('idx_cart_user').on(t.userId),
+  // 一个用户同一商品只能有一行：并发加购靠这条约束兜底（配合 onConflictDoUpdate）
+  uniqueIndex('uq_cart_user_product').on(t.userId, t.productId),
+]);
 
 export const orders = pgTable('order', {
   id: serial('id').primaryKey(),

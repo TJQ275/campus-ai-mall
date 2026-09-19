@@ -2,7 +2,7 @@ import { BadRequestException, Inject, Injectable, NotFoundException } from '@nes
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
-import { cartItems, products, userBehaviors } from '../../db/schema/index.js';
+import { cartItems, products, productSkus, userBehaviors } from '../../db/schema/index.js';
 
 export interface AddCartInput {
   productId: number;
@@ -56,34 +56,44 @@ export class CartService {
   }
 
   async add(userId: number, input: AddCartInput) {
-    const quantity = Math.max(1, input.quantity ?? 1);
+    const quantity = Math.max(1, Math.min(input.quantity ?? 1, 99));
     const found = await this.db.select().from(products).where(eq(products.id, input.productId)).limit(1);
     const product = found[0];
     if (!product || product.status !== 'on') throw new NotFoundException('商品不存在或已下架');
-    if (product.stock < quantity) throw new BadRequestException('库存不足，当前仅剩 ' + product.stock + ' 件');
 
-    const existing = await this.db
-      .select()
-      .from(cartItems)
-      .where(and(eq(cartItems.userId, userId), eq(cartItems.productId, input.productId)))
-      .limit(1);
-
-    const source = input.source ?? 'miniapp';
-    if (existing[0]) {
-      const updated = await this.db
-        .update(cartItems)
-        .set({ quantity: existing[0].quantity + quantity, selected: true, updatedAt: new Date() })
-        .where(eq(cartItems.id, existing[0].id))
-        .returning();
-      return updated[0];
+    // 传了 skuId 就必须是该商品自己的 SKU，防止把别的商品的规格挂上来
+    if (input.skuId) {
+      const sku = (
+        await this.db
+          .select({ id: productSkus.id, enabled: productSkus.enabled })
+          .from(productSkus)
+          .where(and(eq(productSkus.id, input.skuId), eq(productSkus.productId, input.productId)))
+          .limit(1)
+      )[0];
+      if (!sku || !sku.enabled) throw new BadRequestException('规格不存在或已下架');
     }
 
-    const inserted = await this.db
+    if (product.stock < quantity) throw new BadRequestException('库存不足，当前仅剩 ' + product.stock + ' 件');
+
+    const source = input.source ?? 'miniapp';
+
+    // 一条语句完成「有则累加、无则插入」：并发加购靠 uq_cart_user_product 唯一索引兜底，
+    // 不会像「先 select 再 insert」那样产生两行同一商品
+    const upserted = await this.db
       .insert(cartItems)
       .values({ userId, productId: input.productId, skuId: input.skuId ?? null, quantity, source })
+      .onConflictDoUpdate({
+        target: [cartItems.userId, cartItems.productId],
+        set: {
+          quantity: sql`${cartItems.quantity} + ${quantity}`,
+          selected: true,
+          updatedAt: new Date(),
+        },
+      })
       .returning();
+
     void this.db.insert(userBehaviors).values({ userId, productId: input.productId, type: 'cart', weight: 3 }).catch(() => undefined);
-    return inserted[0];
+    return upserted[0];
   }
 
   async update(userId: number, id: number, input: { quantity?: number; selected?: boolean }) {

@@ -38,13 +38,35 @@ export interface ProductCard {
 
 const toCents = (yuan?: number) => (yuan === undefined ? undefined : Math.round(yuan * 100));
 
+/** 分类几乎不变，缓存 60 秒即可消掉首页/分类页的大部分重复查询 */
+const CATEGORY_TTL_MS = 60_000;
+
 @Injectable()
 export class CatalogService {
+  private readonly categoryCache = new Map<string, { data: unknown[]; expiresAt: number }>();
+
   constructor(@Inject(DB) private readonly db: Db) {}
 
   listCategories(kind?: 'snack' | 'book') {
+    const cacheKey = kind ?? 'all';
+    const cached = this.categoryCache.get(cacheKey);
+    if (cached && cached.expiresAt > Date.now()) return Promise.resolve(cached.data);
+
     const where = kind ? and(eq(categories.enabled, true), eq(categories.kind, kind)) : eq(categories.enabled, true);
-    return this.db.select().from(categories).where(where).orderBy(asc(categories.kind), asc(categories.sort));
+    return this.db
+      .select()
+      .from(categories)
+      .where(where)
+      .orderBy(asc(categories.kind), asc(categories.sort))
+      .then((rows) => {
+        this.categoryCache.set(cacheKey, { data: rows, expiresAt: Date.now() + CATEGORY_TTL_MS });
+        return rows;
+      });
+  }
+
+  /** 管理端改完分类后调用，避免改完还要等缓存过期 */
+  clearCategoryCache() {
+    this.categoryCache.clear();
   }
 
   /**
@@ -129,8 +151,13 @@ export class CatalogService {
       this.db.select().from(reviewSummaries).where(eq(reviewSummaries.productId, id)).limit(1),
     ]);
 
-    // 浏览量 + 行为埋点（推荐算法与画像的原料），失败不影响主流程
-    void this.db.update(products).set({ viewCount: product.viewCount + 1 }).where(eq(products.id, id)).catch(() => undefined);
+    // 浏览量 + 行为埋点（推荐算法与画像的原料），失败不影响主流程。
+    // 用 SQL 自增而不是 viewCount + 1：后者在并发下会丢更新（读到的还是旧值）。
+    void this.db
+      .update(products)
+      .set({ viewCount: sql`${products.viewCount} + 1` })
+      .where(eq(products.id, id))
+      .catch(() => undefined);
     if (viewerId) {
       void this.db.insert(userBehaviors).values({ userId: viewerId, productId: id, type: 'view' }).catch(() => undefined);
     }

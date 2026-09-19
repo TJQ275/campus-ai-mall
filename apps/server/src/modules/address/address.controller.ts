@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { AddressService, type AddressInput } from './address.service.js';
+import { AddressRequest } from '@campus/shared';
+import { AddressService } from './address.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator.js';
 
 @ApiTags('收货地址')
@@ -18,13 +20,17 @@ export class AddressController {
 
   @Post()
   @ApiOperation({ summary: '新增地址' })
-  create(@CurrentUser() user: AuthUser, @Body() body: AddressInput) {
+  create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(AddressRequest)) body: AddressRequest) {
     return this.address.create(user.sub, body);
   }
 
   @Patch(':id')
-  @ApiOperation({ summary: '修改地址' })
-  update(@CurrentUser() user: AuthUser, @Param('id', ParseIntPipe) id: number, @Body() body: Partial<AddressInput>) {
+  @ApiOperation({ summary: '修改地址（部分字段）' })
+  update(
+    @CurrentUser() user: AuthUser,
+    @Param('id', ParseIntPipe) id: number,
+    @Body(new ZodValidationPipe(AddressRequest.partial())) body: Partial<AddressRequest>,
+  ) {
     return this.address.update(user.sub, id, body);
   }
 

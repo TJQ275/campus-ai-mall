@@ -3,6 +3,7 @@ import { eq, isNull, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
 import { aiKnowledge, products } from '../../db/schema/index.js';
+import { EMBEDDING_DIM } from '../../db/schema/_shared.js';
 import { LlmService } from './llm.service.js';
 
 /**
@@ -20,15 +21,26 @@ export class EmbeddingService {
   ) {}
 
   get enabled(): boolean {
-    return Boolean(process.env.LLM_EMBEDDING_MODEL) && !this.llm.current.isMock;
+    return Boolean(this.llm.runtimeConfig.embeddingModel) && !this.llm.current.isMock;
   }
 
   async embed(texts: string[]): Promise<number[][] | null> {
     if (!this.enabled) return null;
-    const fn = this.llm.current.embed;
-    if (!fn) return null;
+    const provider = this.llm.current;
+    if (!provider.embed) return null;
     try {
-      return (await fn.call(this.llm.current, texts)) ?? null;
+      const vectors = await provider.embed(texts);
+      if (!vectors?.length) return null;
+      // 向量维度和建表时声明的维度必须一致，否则写库会直接报错。
+      // 这里提前拦住并给出可执行的提示，同时降级为关键词检索，避免整条链路挂掉。
+      if (vectors[0].length !== EMBEDDING_DIM) {
+        this.logger.error(
+          'embedding 维度不匹配：模型输出 ' + vectors[0].length + ' 维，数据库列是 vector(' + EMBEDDING_DIM + ')。' +
+            '请改用 ' + EMBEDDING_DIM + ' 维的向量模型，或改 LLM_EMBEDDING_DIM 后重建向量列。当前已降级为关键词检索。',
+        );
+        return null;
+      }
+      return vectors;
     } catch (error) {
       this.logger.warn('embedding 调用失败，退回关键词检索: ' + (error as Error).message);
       return null;

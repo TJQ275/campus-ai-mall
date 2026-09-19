@@ -25,6 +25,7 @@
     "test:acceptance": "node tests/acceptance.test.cjs",
     "test": "pnpm test:acceptance && pnpm test:miniapp",
     "demo:prepare": "pnpm --filter @campus/server demo:prepare",
-    "setup": "pnpm db:push && pnpm db:seed && pnpm demo:prepare"
+    "setup": "pnpm db:push && pnpm db:seed && pnpm demo:prepare",
+    "dev": "pwsh -File scripts/dev.ps1"
   }
 }

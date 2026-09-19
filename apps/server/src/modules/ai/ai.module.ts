@@ -7,6 +7,7 @@ import { AiController } from './ai.controller.js';
 import { AiService } from './ai.service.js';
 import { AgentService } from './agent.service.js';
 import { LlmService } from './llm.service.js';
+import { LlmConfigService } from './llm-config.service.js';
 import { ToolRegistry } from './tools/tool.registry.js';
 import { CatalogTools } from './tools/catalog.tools.js';
 import { TradeTools } from './tools/trade.tools.js';
@@ -22,6 +23,7 @@ import { EmbeddingService } from './embedding.service.js';
   providers: [
     AiService,
     AgentService,
+    LlmConfigService,
     LlmService,
     EmbeddingService,
     ToolRegistry,
@@ -32,6 +34,6 @@ import { EmbeddingService } from './embedding.service.js';
     MerchantTools,
     CopywritingService,
   ],
-  exports: [AiService, AgentService, LlmService, EmbeddingService, CopywritingService, ToolRegistry],
+  exports: [AiService, AgentService, LlmService, EmbeddingService, CopywritingService, ToolRegistry, LlmConfigService],
 })
 export class AiModule {}

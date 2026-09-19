@@ -1,17 +1,19 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, ParseIntPipe, Post, Req, Res, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import type { Response } from 'express';
-import type { AiChatInput, AiEvent } from '@campus/shared';
+import type { Request, Response } from 'express';
+import { ChatRequest, ConfirmActionRequest, type AiEvent } from '@campus/shared';
 import { AgentService } from './agent.service.js';
 import { AiService } from './ai.service.js';
 import { LlmService } from './llm.service.js';
 import { ToolRegistry } from './tools/tool.registry.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
+import { RateLimit, RateLimitGuard } from '../../common/guards/rate-limit.guard.js';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator.js';
 
 @ApiTags('AI 助手')
 @Controller('ai')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RateLimitGuard)
 export class AiController {
   constructor(
     private readonly agent: AgentService,
@@ -27,32 +29,57 @@ export class AiController {
   }
 
   @Post('chat')
+  @RateLimit({ limit: 30, windowMs: 60_000, by: 'user' })
   @ApiOperation({ summary: '流式对话（SSE）：text / tool_start / tool_result / cards / action_confirm / usage / done' })
-  async chat(@CurrentUser() user: AuthUser, @Body() body: AiChatInput, @Res() res: Response) {
+  async chat(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(ChatRequest)) body: ChatRequest,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
     res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
     res.setHeader('Cache-Control', 'no-cache, no-transform');
     res.setHeader('Connection', 'keep-alive');
     res.setHeader('X-Accel-Buffering', 'no');
     res.flushHeaders?.();
 
+    // 客户端断开（切页面 / 断网 / 关闭小程序）→ 中止这一轮，
+    // 否则模型调用和工具轮次会在后台继续跑完，token 白烧
+    const abort = new AbortController();
+    const onClose = () => abort.abort();
+    req.on('close', onClose);
+
+    let closed = false;
     const send = (event: AiEvent) => {
+      if (closed || res.writableEnded) return;
       res.write('event: ' + event.type + '\n');
       res.write('data: ' + JSON.stringify(event) + '\n\n');
     };
 
+    // 心跳：长回答期间代理/网关会因空闲而切断连接，注释帧可以保活
+    const heartbeat = setInterval(() => {
+      if (!closed && !res.writableEnded) res.write(': ping\n\n');
+    }, 15000);
+
     try {
-      for await (const event of this.agent.run(user.sub, body)) send(event);
+      for await (const event of this.agent.run(user.sub, body, { signal: abort.signal })) send(event);
     } catch (error) {
-      send({ type: 'error', message: (error as Error).message ?? '服务异常' });
+      if (!abort.signal.aborted) {
+        send({ type: 'error', message: (error as Error).message ?? '服务异常' });
+      }
       send({ type: 'done', conversationId: Number(body.conversationId ?? 0), messageId: null });
     } finally {
+      closed = true;
+      clearInterval(heartbeat);
+      req.off('close', onClose);
       res.end();
     }
   }
 
   @Post('chat/sync')
+  @RateLimit({ limit: 30, windowMs: 60_000, by: 'user' })
   @ApiOperation({ summary: '非流式对话：返回完整事件列表与最终回复（便于联调与自动化测试）' })
-  async chatSync(@CurrentUser() user: AuthUser, @Body() body: AiChatInput) {
+  async chatSync(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(ChatRequest)) body: ChatRequest) {
     const events: AiEvent[] = [];
     let reply = '';
     for await (const event of this.agent.run(user.sub, body)) {
@@ -88,7 +115,8 @@ export class AiController {
   confirm(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { decision?: 'confirm' | 'cancel' },
+    @Body(new ZodValidationPipe(ConfirmActionRequest.pick({ decision: true }).partial()))
+    body: { decision?: 'confirm' | 'cancel' },
   ) {
     return this.agent.confirmAction(user.sub, id, body.decision ?? 'confirm');
   }

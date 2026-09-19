@@ -58,29 +58,47 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     return payload;
   }
 
-  private async request(messages: ChatMessage[], tools: ToolSpec[], stream: boolean): Promise<Response> {
+  /**
+   * 发起请求。
+   *
+   * 超时用「读体超时」而不是「连接超时」：早期实现在 finally 里 clearTimeout，
+   * 只保护到拿到响应头 —— 流式响应一旦开始吐字，读取过程就没有任何超时保护，
+   * 上游卡住会永久挂住这个连接并一直占着用户的对话。
+   * 这里把 signal 一路带到 chatStream 的读循环，由调用方在读完（或断开）时收尾。
+   */
+  private async request(
+    messages: ChatMessage[],
+    tools: ToolSpec[],
+    stream: boolean,
+    signal?: AbortSignal,
+  ): Promise<{ response: Response; finish: () => void }> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 60000);
+    const finish = () => clearTimeout(timer);
+    // 外部 signal（客户端断开）与内部超时，任意一个触发都中止请求
+    const combined = signal ? AbortSignal.any([controller.signal, signal]) : controller.signal;
     try {
       const response = await fetch(this.options.baseUrl.replace(/\/+$/, '') + '/chat/completions', {
         method: 'POST',
         headers: this.headers(),
         body: JSON.stringify(this.body(messages, tools, stream)),
-        signal: controller.signal,
+        signal: combined,
       });
       if (!response.ok) {
         const text = await response.text().catch(() => '');
+        finish();
         throw new Error('模型接口返回 ' + response.status + ': ' + text.slice(0, 300));
       }
-      return response;
-    } finally {
-      clearTimeout(timer);
+      return { response, finish };
+    } catch (error) {
+      finish();
+      throw error;
     }
   }
 
-  async chat(messages: ChatMessage[], tools: ToolSpec[]): Promise<ChatResult> {
-    const response = await this.request(messages, tools, false);
-    const json = (await response.json()) as {
+  async chat(messages: ChatMessage[], tools: ToolSpec[], signal?: AbortSignal): Promise<ChatResult> {
+    const { response, finish } = await this.request(messages, tools, false, signal);
+    const json = await response.json().finally(finish) as {
       choices?: { message?: { content?: string; tool_calls?: { id: string; function: { name: string; arguments: string } }[] } }[];
       usage?: { prompt_tokens?: number; completion_tokens?: number };
       model?: string;
@@ -101,9 +119,13 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     };
   }
 
-  async *chatStream(messages: ChatMessage[], tools: ToolSpec[]): AsyncGenerator<StreamChunk, void, unknown> {
-    const response = await this.request(messages, tools, true);
-    if (!response.body) throw new Error('模型接口没有返回流式响应');
+  async *chatStream(messages: ChatMessage[], tools: ToolSpec[], signal?: AbortSignal): AsyncGenerator<StreamChunk, void, unknown> {
+    // 流式请求的超时由 request() 里的 timer 控制，直到这里读完才 clear（finish）
+    const { response, finish } = await this.request(messages, tools, true, signal);
+    if (!response.body) {
+      finish();
+      throw new Error('模型接口没有返回流式响应');
+    }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
@@ -113,39 +135,45 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     const partial = new Map<number, { id?: string; name?: string; args: string }>();
     let model = this.model;
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() ?? '';
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() ?? '';
 
-      for (const line of lines) {
-        const trimmed = line.trim();
-        if (!trimmed.startsWith('data:')) continue;
-        const payload = trimmed.slice(5).trim();
-        if (!payload || payload === '[DONE]') continue;
-        let parsed: { choices?: { delta?: OpenAiDelta }[]; usage?: { prompt_tokens?: number; completion_tokens?: number }; model?: string };
-        try { parsed = JSON.parse(payload); } catch { continue; }
-        if (parsed.model) model = parsed.model;
-        if (parsed.usage) {
-          usage.promptTokens = parsed.usage.prompt_tokens ?? usage.promptTokens;
-          usage.completionTokens = parsed.usage.completion_tokens ?? usage.completionTokens;
-        }
-        const delta = parsed.choices?.[0]?.delta;
-        if (!delta) continue;
-        if (delta.content) {
-          content += delta.content;
-          yield { type: 'text', delta: delta.content };
-        }
-        for (const call of delta.tool_calls ?? []) {
-          const current = partial.get(call.index) ?? { args: '' };
-          if (call.id) current.id = call.id;
-          if (call.function?.name) current.name = call.function.name;
-          if (call.function?.arguments) current.args += call.function.arguments;
-          partial.set(call.index, current);
+        for (const line of lines) {
+          const trimmed = line.trim();
+          if (!trimmed.startsWith('data:')) continue;
+          const payload = trimmed.slice(5).trim();
+          if (!payload || payload === '[DONE]') continue;
+          let parsed: { choices?: { delta?: OpenAiDelta }[]; usage?: { prompt_tokens?: number; completion_tokens?: number }; model?: string };
+          try { parsed = JSON.parse(payload); } catch { continue; }
+          if (parsed.model) model = parsed.model;
+          if (parsed.usage) {
+            usage.promptTokens = parsed.usage.prompt_tokens ?? usage.promptTokens;
+            usage.completionTokens = parsed.usage.completion_tokens ?? usage.completionTokens;
+          }
+          const delta = parsed.choices?.[0]?.delta;
+          if (!delta) continue;
+          if (delta.content) {
+            content += delta.content;
+            yield { type: 'text', delta: delta.content };
+          }
+          for (const call of delta.tool_calls ?? []) {
+            const current = partial.get(call.index) ?? { args: '' };
+            if (call.id) current.id = call.id;
+            if (call.function?.name) current.name = call.function.name;
+            if (call.function?.arguments) current.args += call.function.arguments;
+            partial.set(call.index, current);
+          }
         }
       }
+    } finally {
+      finish();
+      // 主动断开底层的读流，避免连接被挂住
+      await reader.cancel().catch(() => undefined);
     }
 
     const toolCalls: LlmToolCall[] = [...partial.entries()]
@@ -163,14 +191,21 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
   async embed(texts: string[]): Promise<number[][]> {
     if (!this.options.embeddingModel) throw new Error('未配置 LLM_EMBEDDING_MODEL，无法生成向量');
-    const response = await fetch(this.options.baseUrl.replace(/\/+$/, '') + '/embeddings', {
-      method: 'POST',
-      headers: this.headers(),
-      body: JSON.stringify({ model: this.options.embeddingModel, input: texts }),
-    });
-    if (!response.ok) throw new Error('embedding 接口返回 ' + response.status);
-    const json = (await response.json()) as { data: { embedding: number[] }[] };
-    return json.data.map((d) => d.embedding);
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), this.options.timeoutMs ?? 60000);
+    try {
+      const response = await fetch(this.options.baseUrl.replace(/\/+$/, '') + '/embeddings', {
+        method: 'POST',
+        headers: this.headers(),
+        body: JSON.stringify({ model: this.options.embeddingModel, input: texts }),
+        signal: controller.signal,
+      });
+      if (!response.ok) throw new Error('embedding 接口返回 ' + response.status);
+      const json = (await response.json()) as { data: { embedding: number[] }[] };
+      return json.data.map((d) => d.embedding);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 }
 

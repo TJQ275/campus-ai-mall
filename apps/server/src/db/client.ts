@@ -75,15 +75,43 @@ export async function createDb(options: CreateDbOptions = {}): Promise<DbHandle>
 /** 建立 pgvector 扩展与向量索引：必须在迁移之前执行 */
 export async function ensureVectorExtension(handle: DbHandle): Promise<void> {
   await handle.exec('CREATE EXTENSION IF NOT EXISTS vector;');
+  // pg_trgm 让 ILIKE '%关键词%' 能走 GIN 索引（商品检索与知识库关键词检索都靠它）
+  try {
+    await handle.exec('CREATE EXTENSION IF NOT EXISTS pg_trgm;');
+  } catch (error) {
+    console.warn('[db] pg_trgm 扩展创建失败，模糊搜索将退化为全表扫描:', (error as Error).message);
+  }
 }
 
-/** HNSW 索引手写创建：让向量检索走索引而不是全表扫描 */
+/**
+ * 索引创建：向量走 HNSW，文本检索走 pg_trgm GIN。
+ *
+ * 早期只建了 to_tsvector 的 GIN 索引，但业务查询用的是 ILIKE '%kw%' ——
+ * 前缀通配的 ILIKE 用不上那个索引，等于白建（而且没有 trgm 时是全表顺序扫描）。
+ * 现在按代码里真实的查询条件建索引。
+ */
 export async function ensureVectorIndexes(handle: DbHandle): Promise<void> {
   const statements = [
+    // 向量检索
     "CREATE INDEX IF NOT EXISTS idx_product_embedding ON product USING hnsw (embedding vector_cosine_ops)",
     "CREATE INDEX IF NOT EXISTS idx_pimage_embedding ON product_image USING hnsw (embedding vector_cosine_ops)",
     "CREATE INDEX IF NOT EXISTS idx_aiknow_embedding ON ai_knowledge USING hnsw (embedding vector_cosine_ops)",
-    "CREATE INDEX IF NOT EXISTS idx_product_fts ON product USING gin (to_tsvector('simple', title || ' ' || coalesce(subtitle, '')))",
+    // 商品关键词检索（catalog.service.search 的 ILIKE 条件）
+    "CREATE INDEX IF NOT EXISTS idx_product_title_trgm ON product USING gin (title gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_product_subtitle_trgm ON product USING gin (subtitle gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_product_course_trgm ON product USING gin (course gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_product_author_trgm ON product USING gin (author gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_product_tags_trgm ON product USING gin ((tags::text) gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_product_isbn ON product (isbn)",
+    // 列表页常用排序/过滤
+    "CREATE INDEX IF NOT EXISTS idx_product_status_sales ON product (status, sales DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_order_user_created ON \"order\" (user_id, created_at DESC)",
+    "CREATE INDEX IF NOT EXISTS idx_cart_user_selected ON cart_item (user_id, selected)",
+    // 知识库关键词检索（embedding 不可用时的降级路径）
+    "CREATE INDEX IF NOT EXISTS idx_aiknow_title_trgm ON ai_knowledge USING gin (title gin_trgm_ops)",
+    "CREATE INDEX IF NOT EXISTS idx_aiknow_content_trgm ON ai_knowledge USING gin (content gin_trgm_ops)",
+    // 历史遗留：用不上的 FTS 索引，顺手清掉
+    "DROP INDEX IF EXISTS idx_product_fts",
   ];
   for (const statement of statements) {
     try {

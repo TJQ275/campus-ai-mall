@@ -1,5 +1,5 @@
 import { BadRequestException, Inject, Injectable } from '@nestjs/common';
-import { desc, eq } from 'drizzle-orm';
+import { desc, eq, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
 import { users, walletLogs } from '../../db/schema/index.js';
@@ -23,14 +23,19 @@ export class WalletService {
     if (amountCents > 100000) throw new BadRequestException('单次充值不能超过 1000 元');
 
     return this.db.transaction(async (tx) => {
-      const user = (await tx.select().from(users).where(eq(users.id, userId)).limit(1))[0];
-      const balanceAfter = (user?.balanceCents ?? 0) + amountCents;
-      await tx.update(users).set({ balanceCents: balanceAfter }).where(eq(users.id, userId));
+      // 用 SQL 表达式在数据库里自增，而不是「读出来 + 加 + 写回去」——
+      // 后者在并发下会丢更新（充值和下单支付同时发生时会凭空少一笔钱）
+      const updated = await tx
+        .update(users)
+        .set({ balanceCents: sql`${users.balanceCents} + ${amountCents}` })
+        .where(eq(users.id, userId))
+        .returning({ balanceCents: users.balanceCents });
+      if (!updated[0]) throw new BadRequestException('用户不存在');
       await tx.insert(walletLogs).values({
-        userId, type: 'recharge', amountCents, balanceAfter,
+        userId, type: 'recharge', amountCents, balanceAfter: updated[0].balanceCents,
         refType: 'recharge', remark: channel === 'alipay' ? '支付宝模拟充值' : '微信模拟充值',
       });
-      return { balanceCents: balanceAfter };
+      return { balanceCents: updated[0].balanceCents };
     });
   }
 }

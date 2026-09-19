@@ -23,8 +23,12 @@ export class AgentService {
   /**
    * 导购/客服主循环：装配上下文 → 流式调用模型 → 执行工具 → 回灌结果 → 直到模型给出最终回复。
    * 产出的是结构化事件流，控制器直接转成 SSE。
+   *
+   * options.signal：客户端断开时中止。SSE 场景必须传 —— 用户切走页面后
+   * 后续的模型调用和工具轮次都不应该继续消耗 token。
    */
-  async *run(userId: number, input: AiChatInput): AsyncGenerator<AiEvent, void, unknown> {
+  async *run(userId: number, input: AiChatInput, options: { signal?: AbortSignal } = {}): AsyncGenerator<AiEvent, void, unknown> {
+    const signal = options.signal;
     const started = Date.now();
     const user = await this.ai.loadUser(userId);
     const conversation = await this.ai.ensureConversation(userId, {
@@ -54,7 +58,7 @@ export class AgentService {
     const history = await this.ai.history(conversation.id, 16);
     const messages: ChatMessage[] = [
       { role: 'system', content: system },
-      ...history.map((m) => this.toChatMessage(m)),
+      ...this.buildHistoryMessages(history),
     ];
 
     const cards: ProductCard[] = [];
@@ -63,6 +67,11 @@ export class AgentService {
     let lastUsage = { promptTokens: 0, completionTokens: 0, model: this.llm.current.model };
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
+      // 客户端已经断开：立刻停止，不再发起新的模型调用
+      if (signal?.aborted) {
+        this.logger.log('客户端已断开，停止本轮对话（已进行 ' + round + ' 轮工具调用）');
+        return;
+      }
       let provider: LlmProvider = this.llm.current;
       let content = '';
       let result: ChatResult | null = null;
@@ -72,7 +81,7 @@ export class AgentService {
       while (true) {
         attempt += 1;
         try {
-          for await (const chunk of this.streamOnce(provider, messages, specs)) {
+          for await (const chunk of this.streamOnce(provider, messages, specs, signal)) {
             if (chunk.type === 'delta') {
               emitted = true;
               content += chunk.text;
@@ -131,12 +140,13 @@ export class AgentService {
       }
 
       // 有工具调用 → 先落库这一步的助手消息（含 tool_calls 原文，便于回放）
+      // 带上 id 是为了下次重建上下文时能还原成真正的 assistant(tool_calls) + tool 结构
       const assistantTurn = await this.ai.appendMessage({
         conversationId: conversation.id,
         userId,
         role: 'assistant',
         contentType: 'tool_calls',
-        content: JSON.stringify(result.toolCalls.map((c) => ({ name: c.name, arguments: c.arguments }))),
+        content: JSON.stringify(result.toolCalls.map((c) => ({ id: c.id, name: c.name, arguments: c.arguments }))),
         model: result.model,
         latencyMs: Date.now() - started,
         degraded,
@@ -264,16 +274,43 @@ export class AgentService {
     }
   }
 
-  /** 用户点确认后真正执行写操作 */
+  /**
+   * 用户点确认后真正执行写操作。
+   *
+   * 并发安全：先原子抢占（把 status 从 pending 改成 executing），只有抢到的那次调用会执行工具。
+   * 之前是「先读到 pending 再执行」，用户双击确认按钮会加两次购物车 / 提交两张售后单。
+   */
   async confirmAction(userId: number, actionId: number, decision: 'confirm' | 'cancel') {
     const action = await this.ai.getPendingAction(userId, actionId);
-    if (action.status !== 'pending') return { status: action.status, summary: action.summary, message: '该操作已处理过' };
+
+    if (action.status !== 'pending') {
+      const label: Record<string, string> = {
+        confirmed: '该操作已经执行过了',
+        cancelled: '该操作已经取消过了',
+        executing: '该操作正在执行中，请稍候',
+        failed: '该操作执行失败过，请重新发起',
+        expired: '该操作已过期，请重新发起',
+      };
+      return { status: action.status, summary: action.summary, message: label[action.status] ?? '该操作已处理过' };
+    }
+
+    // 过期校验：待确认操作只有 10 分钟有效期（ai_pending_action.expires_at）
+    if (action.expiresAt && action.expiresAt.getTime() < Date.now()) {
+      await this.ai.updatePendingAction(actionId, { status: 'expired', resultMessage: '超过有效期，已自动作废' });
+      return { status: 'expired', summary: action.summary, message: '这个操作已经超过 10 分钟有效期了，请重新告诉我要做什么' };
+    }
 
     const conversation = await this.ai.ensureConversation(userId, { conversationId: action.conversationId });
     const ctx: AiContext = { userId, conversationId: conversation.id, scene: 'shopping' };
 
+    // 抢占：拿不到就说明另一个请求已经在处理（或刚刚处理完）
+    const claimed = await this.ai.claimPendingAction(userId, actionId);
+    if (!claimed) {
+      return { status: 'duplicate', summary: action.summary, message: '这个操作正在处理或已经完成，请勿重复点击' };
+    }
+
     if (decision === 'cancel') {
-      await this.ai.updatePendingAction(actionId, { status: 'cancelled', confirmedAt: new Date(), resultMessage: '用户取消了操作' });
+      await this.ai.updatePendingAction(actionId, { status: 'cancelled', resultMessage: '用户取消了操作' });
       await this.ai.appendMessage({ conversationId: conversation.id, userId, role: 'assistant', content: '好的，已取消：' + action.summary });
       return { status: 'cancelled', summary: action.summary, message: '已取消' };
     }
@@ -287,7 +324,7 @@ export class AgentService {
     const startedAt = Date.now();
     try {
       const outcome = await tool.run(ctx, action.payload as Record<string, unknown>);
-      await this.ai.updatePendingAction(actionId, { status: 'confirmed', confirmedAt: new Date(), resultMessage: outcome.brief });
+      await this.ai.updatePendingAction(actionId, { status: 'confirmed', resultMessage: outcome.brief });
       await this.ai.recordToolCall({
         conversationId: conversation.id,
         userId,
@@ -307,6 +344,8 @@ export class AgentService {
       return { status: 'confirmed', summary: action.summary, message: outcome.brief, data: outcome.data, cards: outcome.cards ?? [] };
     } catch (error) {
       const message = (error as Error).message ?? String(error);
+      // 失败就置为 failed，不做「放回 pending 让用户重试」——
+      // 写操作可能已经落库一半，让用户重试有重复写入的风险，宁可让他重新发起一次
       await this.ai.updatePendingAction(actionId, { status: 'failed', resultMessage: message });
       return { status: 'failed', summary: action.summary, message };
     }
@@ -317,8 +356,9 @@ export class AgentService {
     provider: LlmProvider,
     messages: ChatMessage[],
     specs: ToolSpec[],
+    signal?: AbortSignal,
   ): AsyncGenerator<{ type: 'delta'; text: string } | { type: 'done'; result: ChatResult }, void, unknown> {
-    for await (const chunk of provider.chatStream(messages, specs)) {
+    for await (const chunk of provider.chatStream(messages, specs, signal)) {
       if (chunk.type === 'text') yield { type: 'delta', text: chunk.delta };
       else yield { type: 'done', result: chunk.result };
     }
@@ -332,17 +372,6 @@ export class AgentService {
     toolName: string | null;
   }): ChatMessage {
     const content = row.content ?? '';
-    if (row.role === 'assistant' && row.contentType === 'tool_calls') {
-      let calls: { name: string }[] = [];
-      try {
-        calls = JSON.parse(content) as { name: string }[];
-      } catch { calls = []; }
-      // 历史里的工具调用轮次不再重放，只留一行痕迹，避免模型重复调用同一工具
-      return { role: 'assistant', content: calls.map((c) => '（调用工具 ' + c.name + '）').join(' ') };
-    }
-    if (row.role === 'tool') {
-      return { role: 'assistant', content: '（工具 ' + (row.toolName ?? '') + ' 返回：' + content.slice(0, 1500) + '）' };
-    }
     if (row.role === 'assistant') {
       const cards = (row.cards ?? []) as { id?: number; title?: string }[];
       const marker = cards.length
@@ -350,6 +379,92 @@ export class AgentService {
         : '';
       return { role: 'assistant', content: content + marker };
     }
+    if (row.role === 'tool') {
+      // 兜底：孤立的工具结果（没有配对的 tool_calls 行）标成一条系统说明，不要伪装成助手发言
+      return { role: 'user', content: '（历史工具 ' + (row.toolName ?? '') + ' 的结果：' + content.slice(0, 500) + '）' };
+    }
     return { role: row.role as ChatMessage['role'], content };
+  }
+
+  /**
+   * 把落库的消息还原成模型能理解的对话结构。
+   *
+   * 早期实现把历史里的 tool 结果改写成「assistant 自己说的一段话」，模型会以为
+   * 那些商品数据是自己讲过的（没有工具来源），既违反系统提示里「数字只能来自工具」
+   * 的硬规则，也是幻觉的来源。这里保留真实的 assistant(tool_calls) + tool 配对。
+   * 工具结果仍然截断到 1500 字，避免 prompt 被历史数据撑爆。
+   */
+  private buildHistoryMessages(
+    rows: {
+      id: number;
+      role: string;
+      contentType: string;
+      content: string | null;
+      cards?: unknown[] | null;
+      toolName: string | null;
+      toolCallId?: string | null;
+    }[],
+  ): ChatMessage[] {
+    const messages: ChatMessage[] = [];
+    let i = 0;
+
+    while (i < rows.length) {
+      const row = rows[i];
+
+      if (row.role === 'assistant' && row.contentType === 'tool_calls') {
+        let calls: { id?: string; name: string; arguments?: unknown }[] = [];
+        try {
+          const parsed = JSON.parse(row.content ?? '[]') as unknown;
+          calls = Array.isArray(parsed) ? (parsed as { name: string }[]) : [];
+        } catch {
+          calls = [];
+        }
+        if (!calls.length) {
+          i += 1;
+          continue;
+        }
+
+        // 紧随其后的 tool 结果行就是这一轮的返回（工具是串行执行的，顺序可靠）
+        const results: typeof rows = [];
+        let j = i + 1;
+        while (j < rows.length && rows[j].role === 'tool') {
+          results.push(rows[j]);
+          j += 1;
+        }
+
+        const ids = calls.map((call, index) => {
+          const paired = results.find((r) => r.toolCallId && call.id && r.toolCallId === call.id) ?? results[index];
+          return paired?.toolCallId || call.id || 'call_hist_' + row.id + '_' + index;
+        });
+
+        messages.push({
+          role: 'assistant',
+          content: '',
+          tool_calls: calls.map((call, index) => ({
+            id: ids[index],
+            name: call.name,
+            arguments: (call.arguments ?? {}) as Record<string, unknown>,
+            rawArguments: JSON.stringify(call.arguments ?? {}),
+          })),
+        });
+
+        results.forEach((result, index) => {
+          messages.push({
+            role: 'tool',
+            tool_call_id: ids[index],
+            name: result.toolName ?? calls[index]?.name ?? 'tool',
+            content: (result.content ?? '').slice(0, 1500),
+          });
+        });
+
+        i = j;
+        continue;
+      }
+
+      messages.push(this.toChatMessage(row));
+      i += 1;
+    }
+
+    return messages;
   }
 }

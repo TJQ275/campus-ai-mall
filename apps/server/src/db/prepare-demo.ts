@@ -1,6 +1,7 @@
 import './env.js';
 import { createDb } from './client.js';
 import { LlmService } from '../modules/ai/llm.service.js';
+import { LlmConfigService } from '../modules/ai/llm-config.service.js';
 import { ReviewService } from '../modules/review/review.service.js';
 import { sql } from 'drizzle-orm';
 
@@ -12,7 +13,8 @@ import { sql } from 'drizzle-orm';
  */
 async function main() {
   const handle = await createDb();
-  const llm = new LlmService();
+  const llm = new LlmService(new LlmConfigService(handle.db));
+  await llm.init();
   const review = new ReviewService(handle.db, llm);
 
   const rows = await handle.db.execute(sql`

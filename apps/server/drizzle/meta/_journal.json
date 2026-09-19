@@ -8,6 +8,13 @@
       "when": 1789786954427,
       "tag": "0000_icy_umar",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1789796749403,
+      "tag": "0001_low_paibok",
+      "breakpoints": true
     }
   ]
 }

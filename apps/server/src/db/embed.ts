@@ -1,6 +1,7 @@
 import './env.js';
 import { createDb } from './client.js';
 import { LlmService } from '../modules/ai/llm.service.js';
+import { LlmConfigService } from '../modules/ai/llm-config.service.js';
 import { EmbeddingService } from '../modules/ai/embedding.service.js';
 
 /**
@@ -10,7 +11,9 @@ import { EmbeddingService } from '../modules/ai/embedding.service.js';
  */
 async function main() {
   const handle = await createDb();
-  const llm = new LlmService();
+  // 脚本里手动装配：配置来源与线上一致（后台设置页保存的库配置 > .env）
+  const llm = new LlmService(new LlmConfigService(handle.db));
+  await llm.init();
   const embedding = new EmbeddingService(handle.db, llm);
 
   if (!embedding.enabled) {

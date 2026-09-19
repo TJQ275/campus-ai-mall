@@ -1,13 +1,16 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, UseGuards } from '@nestjs/common';
 import { ApiOperation, ApiTags } from '@nestjs/swagger';
-import { OrderService, type CreateOrderInput } from './order.service.js';
+import { CreateOrderRequest, PayOrderRequest } from '@campus/shared';
+import { OrderService } from './order.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { RolesGuard, Roles } from '../../common/guards/roles.guard.js';
+import { RateLimit, RateLimitGuard } from '../../common/guards/rate-limit.guard.js';
+import { ZodValidationPipe } from '../../common/pipes/zod-validation.pipe.js';
 import { CurrentUser, type AuthUser } from '../../common/decorators/current-user.decorator.js';
 
 @ApiTags('订单')
 @Controller('orders')
-@UseGuards(JwtAuthGuard)
+@UseGuards(JwtAuthGuard, RateLimitGuard)
 export class OrderController {
   constructor(private readonly order: OrderService) {}
 
@@ -18,15 +21,29 @@ export class OrderController {
   }
 
   @Post()
+  @RateLimit({ limit: 20, windowMs: 60_000, by: 'user' })
   @ApiOperation({ summary: '创建订单（source=ai 表示 AI 助手代下单）' })
-  create(@CurrentUser() user: AuthUser, @Body() body: CreateOrderInput) {
+  create(@CurrentUser() user: AuthUser, @Body(new ZodValidationPipe(CreateOrderRequest)) body: CreateOrderRequest) {
     return this.order.create(user.sub, body);
   }
 
+  @Get('summary')
+  @ApiOperation({ summary: '各状态订单数（「我的」页面角标，一次聚合查询）' })
+  summary(@CurrentUser() user: AuthUser) {
+    return this.order.summary(user.sub);
+  }
+
   @Get()
-  @ApiOperation({ summary: '我的订单（status=all|pending_pay|paid|shipped|finished）' })
-  list(@CurrentUser() user: AuthUser, @Query('status') status?: string) {
-    return this.order.list(user.sub, status);
+  @ApiOperation({ summary: '我的订单（分页，status=all|pending_pay|paid|shipped|finished）' })
+  list(
+    @CurrentUser() user: AuthUser,
+    @Query() query: { status?: string; page?: string; pageSize?: string },
+  ) {
+    return this.order.pageForUser(user.sub, {
+      status: query.status,
+      page: query.page ? Number(query.page) : 1,
+      pageSize: query.pageSize ? Number(query.pageSize) : 10,
+    });
   }
 
   @Get(':id')
@@ -40,9 +57,9 @@ export class OrderController {
   pay(
     @CurrentUser() user: AuthUser,
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { channel: 'wechat' | 'alipay' | 'balance' },
+    @Body(new ZodValidationPipe(PayOrderRequest)) body: PayOrderRequest,
   ) {
-    return this.order.pay(user.sub, id, body.channel ?? 'wechat');
+    return this.order.pay(user.sub, id, body.channel);
   }
 
   @Post(':id/cancel')

@@ -12,15 +12,17 @@ export class MockProvider implements LlmProvider {
   readonly model = 'mock-rule-based';
   readonly isMock = true;
 
-  async chat(messages: ChatMessage[], tools: ToolSpec[]): Promise<ChatResult> {
+  async chat(messages: ChatMessage[], tools: ToolSpec[], signal?: AbortSignal): Promise<ChatResult> {
     let result: ChatResult | null = null;
-    for await (const chunk of this.chatStream(messages, tools)) {
+    for await (const chunk of this.chatStream(messages, tools, signal)) {
       if (chunk.type === 'done') result = chunk.result;
     }
     return result ?? { content: '', toolCalls: [], usage: emptyUsage(), model: this.model, degraded: true };
   }
 
-  async *chatStream(messages: ChatMessage[], tools: ToolSpec[]): AsyncGenerator<StreamChunk, void, unknown> {
+  async *chatStream(messages: ChatMessage[], tools: ToolSpec[], signal?: AbortSignal): AsyncGenerator<StreamChunk, void, unknown> {
+    // 客户端已断开就不用继续「假流式」了
+    if (signal?.aborted) return;
     const last = messages[messages.length - 1];
     const available = new Set(tools.map((t) => t.name));
 

@@ -1,4 +1,4 @@
-import { Inject, Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { and, asc, desc, eq, ilike, or, sql } from 'drizzle-orm';
 import { DB } from '../database/database.module.js';
 import type { Db } from '../../db/client.js';
@@ -220,7 +220,16 @@ export class AdminAiService {
   }
 
   async knowledgeUpdate(id: number, input: { scene?: string; title?: string; source?: string; content?: string; enabled?: boolean }) {
-    const updated = await this.db.update(aiKnowledge).set(input).where(eq(aiKnowledge.id, id)).returning();
+    // 显式挑字段：早期是 set(input) 全量透传，客户端可以顺手改 embedding 等内部字段
+    const patch: Record<string, unknown> = {};
+    if (input.scene !== undefined) patch.scene = String(input.scene).slice(0, 20);
+    if (input.title !== undefined) patch.title = String(input.title).slice(0, 120);
+    if (input.source !== undefined) patch.source = input.source === null ? null : String(input.source).slice(0, 120);
+    if (input.content !== undefined) patch.content = String(input.content).slice(0, 10000);
+    if (input.enabled !== undefined) patch.enabled = Boolean(input.enabled);
+    if (!Object.keys(patch).length) throw new BadRequestException('没有需要修改的字段');
+
+    const updated = await this.db.update(aiKnowledge).set(patch).where(eq(aiKnowledge.id, id)).returning();
     if (!updated[0]) throw new NotFoundException('知识条目不存在');
     await this.embedKnowledge(id, updated[0].title, updated[0].content);
     return updated[0];

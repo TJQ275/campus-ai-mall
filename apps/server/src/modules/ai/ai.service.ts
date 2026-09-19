@@ -168,6 +168,19 @@ export class AiService {
     return updated[0];
   }
 
+  /**
+   * 原子抢占待确认操作：只有把状态从 pending 改成 executing 的那一次调用能拿到记录。
+   * 用户双击「确认」、或客户端自动重试时，第二个请求会拿到 null，从而不会重复执行写操作。
+   */
+  async claimPendingAction(userId: number, id: number) {
+    const claimed = await this.db
+      .update(aiPendingActions)
+      .set({ status: 'executing', confirmedAt: new Date() })
+      .where(and(eq(aiPendingActions.id, id), eq(aiPendingActions.userId, userId), eq(aiPendingActions.status, 'pending')))
+      .returning();
+    return claimed[0] ?? null;
+  }
+
   listConversations(userId: number) {
     return this.db
       .select()

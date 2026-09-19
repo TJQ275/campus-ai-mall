@@ -46,8 +46,12 @@ export interface LlmProvider {
   readonly name: string;
   readonly model: string;
   readonly isMock: boolean;
-  chat(messages: ChatMessage[], tools: ToolSpec[]): Promise<ChatResult>;
-  chatStream(messages: ChatMessage[], tools: ToolSpec[]): AsyncGenerator<StreamChunk, void, unknown>;
+  /**
+   * signal：客户端断开时中止请求。
+   * 流式对话必须传 —— 否则用户切走页面后模型还在继续生成，token 白白烧掉。
+   */
+  chat(messages: ChatMessage[], tools: ToolSpec[], signal?: AbortSignal): Promise<ChatResult>;
+  chatStream(messages: ChatMessage[], tools: ToolSpec[], signal?: AbortSignal): AsyncGenerator<StreamChunk, void, unknown>;
   /** 有 embedding 模型时启用；否则语义检索自动关闭 */
   embed?(texts: string[]): Promise<number[][]>;
 }
