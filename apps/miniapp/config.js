@@ -10,8 +10,12 @@ const ENV = {
 
 const BASE_URL = ENV.dev;
 
-/** 电脑端管理后台地址：商家登录后在手机上看不到的部分（商品编辑、AI 配置）都在这里 */
-const ADMIN_URL = 'http://localhost:5173';
+/**
+ * 电脑端管理后台地址。
+ * 后端已经托管了管理后台构建产物，所以它和接口是**同源**的 ——
+ * 这里从 BASE_URL 推导，换成公网域名（或内网穿透地址）时自动跟着变，不用单独维护。
+ */
+const ADMIN_URL = BASE_URL.replace(/\/api\/?$/, '');
 
 module.exports = {
   BASE_URL,
