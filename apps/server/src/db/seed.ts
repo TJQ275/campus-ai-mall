@@ -282,6 +282,13 @@ async function main() {
     { productId: snackRows[0].id, userId: wang.id, rating: 4, content: '好吃就是有点油，晚上吃容易口渴。' },
     { productId: bookRows[0].id, userId: zhang.id, rating: 5, content: '书很新，笔记做得很整齐，比买新的省了三十块。' },
     { productId: bookRows[1].id, userId: li.id, rating: 4, content: '封面有点卷边，内页干净，能接受。' },
+    { productId: snackRows[10].id, userId: wang.id, rating: 5, content: '热水一冲就好，宿舍常备，汤头够味。' },
+    { productId: snackRows[10].id, userId: zhang.id, rating: 4, content: '味道不错，就是面量偏少，男生可能吃不饱。' },
+    { productId: snackRows[10].id, userId: li.id, rating: 3, content: '有点咸，调料包我只放了一半。' },
+    { productId: snackRows[3].id, userId: zhang.id, rating: 5, content: '原味最耐吃，追剧必备，一大包能撑一晚上。' },
+    { productId: snackRows[3].id, userId: wang.id, rating: 4, content: '碎了几片，其他都还好。' },
+    { productId: bookRows[5].id, userId: zhang.id, rating: 5, content: '严蔚敏这本笔记很多，考研复习直接用，省了整理时间。' },
+    { productId: bookRows[5].id, userId: li.id, rating: 4, content: '书角有点磨，内容完整，价格很划算。' },
   ]);
   await db.insert(t.reviewSummaries).values([
     {

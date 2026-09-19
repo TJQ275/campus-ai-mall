@@ -14,8 +14,9 @@ async function main() {
   console.log('[db] driver =', handle.driver);
 
   if (reset) {
-    console.log('[db] --reset：清空 public schema');
-    await handle.exec('DROP SCHEMA IF EXISTS public CASCADE; CREATE SCHEMA public;');
+    console.log('[db] --reset：清空 public schema 与迁移记录');
+    // 必须连 drizzle schema 一起删：迁移记录还在的话 migrate() 会认为已经建过表而跳过
+    await handle.exec('DROP SCHEMA IF EXISTS public CASCADE; DROP SCHEMA IF EXISTS drizzle CASCADE; CREATE SCHEMA public;');
   }
 
   await ensureVectorExtension(handle);

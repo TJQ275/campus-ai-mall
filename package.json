@@ -20,6 +20,11 @@
     "dev:admin": "pnpm --filter @campus/admin dev",
     "build:admin": "pnpm --filter @campus/admin build",
     "test:miniapp": "node tests/miniapp-sse.test.cjs && node tests/miniapp-api.test.cjs",
-    "dev:miniapp": "echo 用微信开发者工具打开 apps/miniapp 目录"
+    "dev:miniapp": "echo 用微信开发者工具打开 apps/miniapp 目录",
+    "db:reset": "pnpm --filter @campus/server db:reset",
+    "test:acceptance": "node tests/acceptance.test.cjs",
+    "test": "pnpm test:acceptance && pnpm test:miniapp",
+    "demo:prepare": "pnpm --filter @campus/server demo:prepare",
+    "setup": "pnpm db:push && pnpm db:seed && pnpm demo:prepare"
   }
 }
