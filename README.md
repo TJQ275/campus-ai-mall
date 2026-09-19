@@ -1,6 +1,6 @@
 # AI优选零食
 
-[![CI](https://github.com/<你的用户名>/<仓库名>/actions/workflows/ci.yml/badge.svg)](../../actions/workflows/ci.yml)
+[![CI](https://github.com/TJQ275/campus-ai-mall/actions/workflows/ci.yml/badge.svg)](https://github.com/TJQ275/campus-ai-mall/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-67c23a.svg)](LICENSE)
 [![Tests](https://img.shields.io/badge/tests-177%20passing-67c23a.svg)](#自动化验收)
 [![Node](https://img.shields.io/badge/node-%3E%3D20-339933.svg)](package.json)
