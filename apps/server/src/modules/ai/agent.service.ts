@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import type { AiChatInput, AiEvent } from '@campus/shared';
+import { AIMessage, HumanMessage } from '@langchain/core/messages';
 import { AiService } from './ai.service.js';
 import { LlmService } from './llm.service.js';
 import { AiUsageService } from './usage.service.js';
@@ -7,8 +8,10 @@ import { ToolRegistry } from './tools/tool.registry.js';
 import { buildSystemPrompt } from './prompt.js';
 import { buildHistoryMessages } from './history.js';
 import type { AiContext } from './tools/tool.types.js';
-import type { ChatMessage, ChatResult, LlmProvider, LlmToolCall, ToolSpec } from './provider/types.js';
-import type { ProductCard } from '../catalog/catalog.service.js';
+import { MockChatModel } from './langchain/mock-chat-model.js';
+import { createRunSink, toLangChainTool, type WriteInterceptor } from './langchain/tools.adapter.js';
+import { runLangChainAgent, type AgentRunOutcome } from './langchain/agent-runner.js';
+import { toLangChainMessages } from './langchain/history.adapter.js';
 import {
   STAGE_LABEL,
   verifyAnswer,
@@ -17,25 +20,13 @@ import {
   type VerifyIssue,
 } from './workflow.js';
 
-// 实测 4 轮不够：模型遇到「把X加到购物车」会先查画像 → 再检索两次 → 再看详情，
-// 4 轮被检索吃光，真正的 add_to_cart 根本没机会调用，收尾时还会谎称已完成。
-// 配合「相同参数去重」，放宽到 6 轮既够用又不会被无限检索拖住。
-const MAX_TOOL_ROUNDS = 6;
-
 /**
- * 轮次用尽后的收尾提示。
+ * 单轮最多几轮工具调用。
  *
- * 最后那句诚实性要求是必须的：实测模型在没有工具可用时，会直接宣称
- * 「已把商品加入购物车」——而它根本没调用 add_to_cart，用户会以为购物车里真有东西。
- * 宁可让模型说「这件事还没完成」，也不能给一个假的成功确认。
+ * LangChain 的 createAgent 用 recursionLimit 表达「图最多走多少步」——
+ * 每轮工具 = 1 次模型节点 + 1 次工具节点，所以这里换算成 (轮次 + 2) * 2 再传进去。
  */
-const FORCED_ANSWER_HINT = [
-  '（系统提醒）已经达到工具调用次数上限，本轮不能再调用任何工具。',
-  '请基于上面已经拿到的工具结果，用中文回答用户最初的问题。',
-  '重要的诚实性要求：如果用户要求的是一个「操作」（加购、下单、申请售后等），',
-  '而上面的对话里并没有该操作的工具执行结果，你必须如实说明「这件事还没完成」，',
-  '并告诉用户再说一次或点确认即可；绝对不许声称已经完成。',
-].join('');
+const MAX_TOOL_ROUNDS = 6;
 
 @Injectable()
 export class AgentService {
@@ -49,14 +40,19 @@ export class AgentService {
   ) {}
 
   /**
-   * 导购/客服主循环：装配上下文 → 流式调用模型 → 执行工具 → 回灌结果 → 直到模型给出最终回复。
-   * 产出的是结构化事件流，控制器直接转成 SSE。
+   * 导购 / 客服主流程。
    *
-   * options.signal：客户端断开时中止。SSE 场景必须传 —— 用户切走页面后
-   * 后续的模型调用和工具轮次都不应该继续消耗 token。
+   * 现在的实现是 **LangChain createAgent（底层 LangGraph）+ 我们自己的事件协议**：
+   *   - 模型走 LangChain（ChatOpenAI 或自定义的 MockChatModel）
+   *   - 工具走 LangChain 的 tool()（由 tools.adapter 从项目里的 AiTool 转换而来）
+   *   - 编排交给 createAgent，不再自己写 while 循环
+   *   - **产出仍然是项目原有的 SSE 事件协议**（text / tool_start / tool_result / cards /
+   *     action_confirm / stage / usage / done），前端一行都不用改
+   *
+   * 框架替不了、因此仍然自己实现的部分：
+   *   两阶段写操作（tools.adapter 里拦截）、按调用粒度记账、作答前规则校验、预算闸门。
    */
   async *run(userId: number, input: AiChatInput, options: { signal?: AbortSignal } = {}): AsyncGenerator<AiEvent, void, unknown> {
-    const signal = options.signal;
     const started = Date.now();
     const user = await this.ai.loadUser(userId);
     const conversation = await this.ai.ensureConversation(userId, {
@@ -81,288 +77,155 @@ export class AgentService {
       attachments: input.imageUrls ?? [],
     });
 
-    let degraded = this.llm.current.isMock;
+    let degraded = this.llm.isMockMode;
 
-    // 日预算闸门放在最前面：先确定这一轮能不能用收费模型，再谈规划。
-    // 今天花的钱超过预算就整轮降级到本地 Mock，避免账单失控 ——
-    // 用户拿到的回复依旧完整可用（规则 + 协同过滤），只是不再调用收费模型。
+    // 日预算闸门：超预算就整轮用本地模型，不再产生任何费用
     const budget = await this.usage.budgetStatus();
-    const overBudget = budget.overBudget && !this.llm.current.isMock;
+    const overBudget = budget.overBudget && !this.llm.isMockMode;
     if (overBudget) {
       degraded = true;
       this.logger.warn('今日 AI 预算已用完（已花 ' + budget.spentMicro + ' 微元 / 预算 ' + budget.budgetMicro + '），本轮降级为本地模式');
     }
 
-    const specs = this.registry.specs(ctx.scene);
+    const sceneTools = this.registry.toolsForScene(ctx.scene);
     yield { type: 'stage', stage: 'understand', label: STAGE_LABEL.understand, status: 'done', brief: ctx.scene + ' 场景' };
     yield {
       type: 'stage', stage: 'plan', label: STAGE_LABEL.plan, status: 'done',
-      brief: '可用工具 ' + specs.length + ' 个' + (overBudget ? '（预算已用尽，走本地模式）' : ''),
+      brief: '可用工具 ' + sceneTools.length + ' 个' + (overBudget ? '（预算已用尽，走本地模式）' : ''),
     };
-    const system = buildSystemPrompt(ctx, user, specs.map((s) => s.name));
+
+    const system = buildSystemPrompt(ctx, user, sceneTools.map((t) => t.name));
     const history = await this.ai.history(conversation.id, 16);
-    const messages: ChatMessage[] = [
-      { role: 'system', content: system },
-      ...buildHistoryMessages(history),
-    ];
+    const historyMessages = toLangChainMessages(buildHistoryMessages(history));
 
-    const cards: ProductCard[] = [];
-    // 同一轮对话里「工具名 + 参数」的指纹集合。
-    // 实测轻量模型会拿一模一样的参数反复调 search_products，
-    // 4 轮上限被烧光，用户拿到的是「工具调用次数已达上限」而不是答案。
-    // 重复调用直接不执行，改成回灌一条提示让模型基于已有结果作答。
-    const calledFingerprints = new Set<string>();
-    // 工作流校验阶段需要的观测数据：调了哪些工具、哪些是写操作、有没有待确认动作、
-    // 以及所有工具结果的原文（用来核对答案里的金额有没有出处）。
-    const trace = {
-      toolsCalled: [] as string[],
-      writeToolsCalled: [] as string[],
-      toolContextParts: [] as string[],
-      pendingActionCount: 0,
-      actStageEmitted: false,
-    };
-    let finalMessageId: number | null = null;
+    const sink = createRunSink();
+    const toolLabels = new Map(sceneTools.map((t) => [t.name, t.label]));
+    const model = overBudget ? new MockChatModel() : this.llm.chatModel({ streaming: true });
+    const tools = sceneTools.map((t) => toLangChainTool(t, ctx, sink, this.writeInterceptor()));
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round += 1) {
-      // 客户端已经断开：立刻停止，不再发起新的模型调用
-      if (signal?.aborted) {
-        this.logger.log('客户端已断开，停止本轮对话（已进行 ' + round + ' 轮工具调用）');
-        return;
-      }
-      // 超预算时整轮都用 Mock，不再发起任何收费调用
-      let provider: LlmProvider = overBudget ? this.llm.mock() : this.llm.current;
-      let content = '';
-      let result: ChatResult | null = null;
-      let emitted = false;
-      let attempt = 0;
-
-      while (true) {
-        attempt += 1;
-        try {
-          for await (const chunk of this.streamOnce(provider, messages, specs, signal)) {
-            if (chunk.type === 'delta') {
-              emitted = true;
-              content += chunk.text;
-              yield { type: 'text', delta: chunk.text };
-            } else {
-              result = chunk.result;
-            }
-          }
-          break;
-        } catch (error) {
-          const message = (error as Error).message ?? String(error);
-          this.logger.error('模型调用失败: ' + message);
-          // 真实模型在「还没吐出任何内容」时失败 → 自动降级到 Mock，保证演示不中断
-          if (attempt === 1 && !emitted && !provider.isMock) {
-            provider = this.llm.mock();
-            degraded = true;
-            content = '';
-            yield { type: 'tool_result', toolName: 'llm', ok: false, brief: '真实模型不可用，已切换到本地演示模式' };
-            continue;
-          }
-          yield { type: 'error', message: '模型调用失败：' + message };
-          result = { content: '抱歉，我这边暂时联系不上模型服务，请稍后再试。', toolCalls: [], usage: { promptTokens: 0, completionTokens: 0 }, model: provider.model, degraded: true };
-          break;
-        }
-      }
-
-      if (!result) break;
-      degraded = degraded || result.degraded;
-
-      // 每一轮模型调用都记一笔账，**包含中间的工具轮次**。
-      // 修掉的 bug：原先只在「最终回复」那条 ai_message 上落 token，
-      // 一次 3 轮工具的对话实际付了 3 次调用的钱，账上却只记了最后 1 次。
-      await this.usage.record({
-        userId,
-        conversationId: conversation.id,
-        scene: ctx.scene,
-        model: result.model,
-        kind: 'chat',
-        promptTokens: result.usage.promptTokens,
-        completionTokens: result.usage.completionTokens,
-        latencyMs: Date.now() - started,
-        // 用「这一次调用」的降级状态，而不是累积值，否则一次降级会把后面所有调用都标成降级
-        degraded: result.degraded,
-      });
-
-      // 没有工具调用 → 这就是最终回复。但**不能直接发**，先过校验阶段。
-      if (!result.toolCalls.length) {
-        const draft = result.content || content;
-        yield { type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'start' };
-
-        const verified = await this.verifyAndCorrect({
-          userId, conversationId: conversation.id, scene: ctx.scene,
-          userMessage: input.message, draft, trace, overBudget,
-          // 带纠正指令重写一次。重写同样是一次模型调用，所以也记账。
-          regenerate: async (correctionPrompt) => {
-            const retry = await provider.chat(
-              [...messages, { role: 'assistant', content: draft }, { role: 'user', content: correctionPrompt }],
-              [], signal,
-            );
-            await this.usage.record({
-              userId, conversationId: conversation.id, scene: ctx.scene,
-              model: retry.model, kind: 'chat',
-              promptTokens: retry.usage.promptTokens, completionTokens: retry.usage.completionTokens,
-              latencyMs: Date.now() - started, degraded: retry.degraded,
-            });
-            return retry.content ?? '';
-          },
-        });
-
-        const blocking = verified.issues.filter((x) => x.severity === 'block');
-        const warning = verified.issues.filter((x) => x.severity === 'warn');
-        if (warning.length) this.logger.warn('回答校验告警: ' + warning.map((x) => x.rule + ' ' + x.detail).join(' | '));
-        yield {
-          type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'done',
-          brief: blocking.length
-            ? '发现 ' + blocking.length + ' 个问题' + (verified.corrected ? '，已修正' : '')
-            : '通过' + (warning.length ? '（' + warning.length + ' 条告警）' : ''),
-        };
-
-        yield { type: 'stage', stage: 'respond', label: STAGE_LABEL.respond, status: 'start' };
-        const saved = await this.ai.appendMessage({
-          conversationId: conversation.id,
-          userId,
-          role: 'assistant',
-          content: verified.text,
-          cards,
-          model: result.model,
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          latencyMs: Date.now() - started,
-          degraded,
-        });
-        finalMessageId = saved.id;
-        if (verified.corrected) yield { type: 'text', delta: verified.text };
-        yield {
-          type: 'usage',
-          promptTokens: result.usage.promptTokens,
-          completionTokens: result.usage.completionTokens,
-          model: result.model,
-          degraded,
-          latencyMs: Date.now() - started,
-        };
-        yield { type: 'done', conversationId: conversation.id, messageId: finalMessageId };
-        return;
-      }
-
-      // 有工具调用 → 先落库这一步的助手消息（含 tool_calls 原文，便于回放）
-      // 带上 id 是为了下次重建上下文时能还原成真正的 assistant(tool_calls) + tool 结构
-      const assistantTurn = await this.ai.appendMessage({
-        conversationId: conversation.id,
-        userId,
-        role: 'assistant',
-        contentType: 'tool_calls',
-        content: JSON.stringify(result.toolCalls.map((c) => ({ id: c.id, name: c.name, arguments: c.arguments }))),
-        model: result.model,
-        latencyMs: Date.now() - started,
-        degraded,
-      });
-      // 这里**不能**再 yield result.content：provider 在流式读循环里已经把每个 delta
-      // 通过 { type: 'text' } 发过了，result.content 是它们的拼接。再发一次等于把这句话重播一遍
-      // （评测跑出来的现象是同一句话连着出现两遍）。
-      messages.push({ role: 'assistant', content: result.content, tool_calls: result.toolCalls });
-
-      for (const call of result.toolCalls) {
-        const fingerprint = call.name + ':' + JSON.stringify(call.arguments ?? {});
-        if (calledFingerprints.has(fingerprint)) {
-          // 不执行，回灌一条提示让模型基于已有结果作答
-          messages.push({
-            role: 'tool',
-            tool_call_id: call.id,
-            name: call.name,
-            content: JSON.stringify({
-              note: '你已经用完全相同的参数调用过这个工具，结果就在上面的对话里。请直接据此回答用户，不要再次调用。',
-              repeated: true,
-            }),
-          });
-          yield { type: 'tool_result', toolName: call.name, ok: true, brief: '参数与上次相同，已跳过重复调用' };
-          continue;
-        }
-        calledFingerprints.add(fingerprint);
-        if (!trace.actStageEmitted) {
-          trace.actStageEmitted = true;
-          yield { type: 'stage', stage: 'act', label: STAGE_LABEL.act, status: 'start' };
-        }
-        yield* this.executeTool(ctx, call, { conversationId: conversation.id, assistantMessageId: assistantTurn.id, cards, messages, trace });
-      }
-    }
-
-    // 轮次用尽。原实现是直接甩一句「工具调用次数已达上限」就结束 ——
-    // 评测里「推荐个方便面」正是走到这里，用户拿到的是**空回复**，非常糟糕。
-    // 正确做法是：把工具摘掉再问一次，逼模型用已经拿到的结果作答。
-    const lastProvider = overBudget ? this.llm.mock() : this.llm.current;
-    let forcedText = '';
+    const outcome: AgentRunOutcome = { text: '', rounds: 0, usage: { promptTokens: 0, completionTokens: 0 } };
     try {
-      const forced = await lastProvider.chat(
-        [...messages, { role: 'user', content: FORCED_ANSWER_HINT }],
-        [],
-        signal,
-      );
-      forcedText = (forced.content ?? '').trim();
-      await this.usage.record({
-        userId, conversationId: conversation.id, scene: ctx.scene,
-        model: forced.model, kind: 'chat',
-        promptTokens: forced.usage.promptTokens, completionTokens: forced.usage.completionTokens,
-        latencyMs: Date.now() - started, degraded: forced.degraded,
-      });
-    } catch (error) {
-      this.logger.warn('收尾作答失败: ' + (error as Error).message);
-    }
-
-    if (forcedText) {
-      // 收尾作答同样要过校验 —— 这正是当初出问题的地方：
-      // 轮次耗尽后没有工具可用，模型就编了一句「已加入购物车」。
-      yield { type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'start' };
-      const verified = await this.verifyAndCorrect({
-        userId, conversationId: conversation.id, scene: ctx.scene,
-        userMessage: input.message, draft: forcedText, trace, overBudget,
-        regenerate: async (correctionPrompt) => {
-          const retry = await lastProvider.chat(
-            [...messages, { role: 'assistant', content: forcedText }, { role: 'user', content: correctionPrompt }],
-            [], signal,
-          );
-          await this.usage.record({
-            userId, conversationId: conversation.id, scene: ctx.scene,
-            model: retry.model, kind: 'chat',
-            promptTokens: retry.usage.promptTokens, completionTokens: retry.usage.completionTokens,
-            latencyMs: Date.now() - started, degraded: retry.degraded,
-          });
-          return retry.content ?? '';
+      yield* runLangChainAgent(
+        {
+          model, tools, systemPrompt: system, history: historyMessages,
+          userMessage: input.message, sink, toolLabels, maxToolRounds: MAX_TOOL_ROUNDS,
         },
-      });
-      const blocking = verified.issues.filter((x) => x.severity === 'block');
-      yield {
-        type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'done',
-        brief: blocking.length ? '发现 ' + blocking.length + ' 个问题，已修正' : '通过',
-      };
-
-      const saved = await this.ai.appendMessage({
-        conversationId: conversation.id, userId, role: 'assistant',
-        content: verified.text, cards, model: lastProvider.model,
-        latencyMs: Date.now() - started, degraded,
-      });
-      yield { type: 'text', delta: verified.text };
-      yield { type: 'done', conversationId: conversation.id, messageId: saved.id };
-      return;
+        outcome,
+      );
+    } catch (error) {
+      const message = (error as Error).message ?? String(error);
+      this.logger.error('Agent 执行失败: ' + message);
+      degraded = true;
+      outcome.text = outcome.text || '抱歉，我这边暂时联系不上模型服务，请稍后再试。';
+      yield { type: 'error', message: '模型调用失败：' + message };
     }
 
-    yield { type: 'error', message: '这轮对话太复杂了，请换个说法再试一次。' };
-    yield { type: 'done', conversationId: conversation.id, messageId: finalMessageId };
+    // ── 校验阶段：把草稿过一遍规则，命中阻断就带着纠正指令重写 ──
+    yield { type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'start' };
+    const verified = await this.verifyAndCorrect({
+      userId,
+      conversationId: conversation.id,
+      scene: ctx.scene,
+      userMessage: input.message,
+      draft: outcome.text,
+      trace: sink,
+      overBudget,
+      // 重写同样是模型调用：直接问一次，不带工具，避免它又去调工具
+      regenerate: async (correctionPrompt) => {
+        const retry = await model.invoke([
+          ...historyMessages,
+          new HumanMessage(input.message),
+          new AIMessage(outcome.text),
+          new HumanMessage(correctionPrompt),
+        ]);
+        const text = typeof retry.content === 'string' ? retry.content : '';
+        await this.usage.record({
+          userId, conversationId: conversation.id, scene: ctx.scene,
+          model: this.llm.current.model, kind: 'chat', degraded,
+        });
+        return text;
+      },
+    });
+
+    const blocking = verified.issues.filter((x) => x.severity === 'block');
+    const warning = verified.issues.filter((x) => x.severity === 'warn');
+    if (warning.length) this.logger.warn('回答校验告警: ' + warning.map((x) => x.rule + ' ' + x.detail).join(' | '));
+    yield {
+      type: 'stage', stage: 'verify', label: STAGE_LABEL.verify, status: 'done',
+      brief: blocking.length
+        ? '发现 ' + blocking.length + ' 个问题' + (verified.corrected ? '，已修正' : '')
+        : '通过' + (warning.length ? '（' + warning.length + ' 条告警）' : ''),
+    };
+
+    // ── 记账：一次模型调用一条，和迁移前保持一致 ──
+    await this.usage.record({
+      userId,
+      conversationId: conversation.id,
+      scene: ctx.scene,
+      model: this.llm.current.model,
+      kind: 'chat',
+      promptTokens: outcome.usage.promptTokens,
+      completionTokens: outcome.usage.completionTokens,
+      latencyMs: Date.now() - started,
+      degraded,
+    });
+
+    yield { type: 'stage', stage: 'respond', label: STAGE_LABEL.respond, status: 'start' };
+    const saved = await this.ai.appendMessage({
+      conversationId: conversation.id,
+      userId,
+      role: 'assistant',
+      content: verified.text,
+      cards: sink.cards,
+      model: this.llm.current.model,
+      promptTokens: outcome.usage.promptTokens,
+      completionTokens: outcome.usage.completionTokens,
+      latencyMs: Date.now() - started,
+      degraded,
+    });
+
+    yield {
+      type: 'usage',
+      promptTokens: outcome.usage.promptTokens,
+      completionTokens: outcome.usage.completionTokens,
+      model: this.llm.current.model,
+      degraded,
+      latencyMs: Date.now() - started,
+    };
+    yield { type: 'done', conversationId: conversation.id, messageId: saved.id };
   }
 
   /**
-   * 工作流的「校验」阶段：把草稿答案过一遍规则，不通过就带着纠正指令重写一次。
-   *
-   * 为什么必须有这一步：模型会**声称做过某件事**而实际没做。
-   * 评测实测过：用户说「把辣条加到购物车」，模型回答「已加入购物车」，
-   * 而工具链里根本没有 add_to_cart —— 用户会以为购物车里真有东西。
-   * 这类错误必须在发给用户之前拦掉，光靠提示词约束不住。
-   *
-   * 重写后仍然不通过时，返回一句**诚实的兜底说明**，
-   * 而不是把那个假的成功确认发出去 —— 宁可让用户觉得「没办成」，
-   * 也不能让他以为「办成了」。
+   * 写操作拦截器：LangChain 不管「AI 能不能直接改数据」，这部分必须我们自己保留。
+   * 加购 / 售后这类工具不会真的执行，而是先落一条待确认记录，等用户在界面上点确认。
    */
+  private writeInterceptor(): WriteInterceptor {
+    return {
+      createPendingAction: (input) =>
+        this.ai.createPendingAction({
+          conversationId: input.conversationId,
+          userId: input.userId,
+          actionType: input.actionType,
+          summary: input.summary,
+          payload: input.payload,
+        }),
+      // 刻意 await 后不返回：审计记录的返回值对调用方没用，
+      // 直接 return 会把 Promise<记录> 当成 Promise<void> 造成类型不匹配。
+      recordToolCall: async (input) => {
+        await this.ai.recordToolCall({
+          conversationId: input.conversationId,
+          userId: input.userId,
+          toolName: input.toolName,
+          args: input.args,
+          result: input.result,
+          status: input.status as 'ok' | 'error' | 'pending' | 'denied',
+          durationMs: input.durationMs,
+          error: input.error,
+        });
+      },
+    };
+  }
+
   private async verifyAndCorrect(args: {
     userId: number;
     conversationId: number;
@@ -412,126 +275,6 @@ export class AgentService {
     };
   }
 
-  /** 单个工具的执行 / 挂起（写操作）分支 */
-  private async *executeTool(
-    ctx: AiContext,
-    call: LlmToolCall,
-    io: {
-      conversationId: number;
-      assistantMessageId: number;
-      cards: ProductCard[];
-      messages: ChatMessage[];
-      /** 工作流观测数据，供校验阶段使用 */
-      trace: { toolsCalled: string[]; writeToolsCalled: string[]; toolContextParts: string[]; pendingActionCount: number; actStageEmitted: boolean };
-    },
-  ): AsyncGenerator<AiEvent, void, unknown> {
-    const tool = this.registry.get(call.name);
-    if (!tool) {
-      io.messages.push({ role: 'tool', tool_call_id: call.id, name: call.name, content: JSON.stringify({ error: '未知工具 ' + call.name }) });
-      return;
-    }
-
-    yield { type: 'tool_start', toolName: tool.name, label: tool.label };
-    io.trace.toolsCalled.push(tool.name);
-    if (tool.write) io.trace.writeToolsCalled.push(tool.name);
-
-    // 写操作：不执行，落 pending 等用户确认
-    if (tool.write) {
-      const summary = (await tool.confirmSummary?.(call.arguments, ctx)) ?? tool.label;
-      const action = await this.ai.createPendingAction({
-        conversationId: io.conversationId,
-        userId: ctx.userId,
-        actionType: tool.name,
-        summary,
-        payload: call.arguments,
-      });
-      await this.ai.recordToolCall({
-        conversationId: io.conversationId,
-        messageId: io.assistantMessageId,
-        userId: ctx.userId,
-        toolName: tool.name,
-        args: call.arguments,
-        result: { actionId: action.id, summary },
-        status: 'pending',
-      });
-      io.trace.pendingActionCount += 1;
-      io.trace.toolContextParts.push(tool.name + ' ' + summary);
-      yield { type: 'tool_result', toolName: tool.name, ok: true, brief: '等待你确认：' + summary };
-      yield { type: 'action_confirm', actionId: action.id, actionType: tool.name, summary };
-      io.messages.push({
-        role: 'tool',
-        tool_call_id: call.id,
-        name: tool.name,
-        content: JSON.stringify({
-          status: 'pending_user_confirmation',
-          actionId: action.id,
-          summary,
-          note: '已经交给用户在界面上确认，请在回复里告诉用户点确认按钮即可完成',
-        }),
-      });
-      return;
-    }
-
-    const startedAt = Date.now();
-    try {
-      const outcome = await tool.run(ctx, call.arguments);
-      const durationMs = Date.now() - startedAt;
-      // 结果原文进 trace：校验阶段要拿它核对答案里的金额有没有出处
-      io.trace.toolContextParts.push(tool.name + ' ' + (outcome.brief ?? '') + ' ' + JSON.stringify(outcome.data ?? {}));
-      if (outcome.cards?.length) {
-        io.cards.push(...outcome.cards);
-        yield { type: 'cards', products: outcome.cards.map((c) => ({ ...c })) };
-      }
-      yield { type: 'tool_result', toolName: tool.name, ok: true, brief: outcome.brief };
-      await this.ai.recordToolCall({
-        conversationId: io.conversationId,
-        messageId: io.assistantMessageId,
-        userId: ctx.userId,
-        toolName: tool.name,
-        args: call.arguments,
-        result: outcome.data,
-        status: 'ok',
-        durationMs,
-      });
-      await this.ai.appendMessage({
-        conversationId: io.conversationId,
-        userId: ctx.userId,
-        role: 'tool',
-        contentType: 'tool_result',
-        content: JSON.stringify(outcome.data),
-        toolCallId: call.id,
-        toolName: tool.name,
-        latencyMs: durationMs,
-      });
-      const payload =
-        outcome.data && typeof outcome.data === 'object' && !Array.isArray(outcome.data)
-          ? (outcome.data as Record<string, unknown>)
-          : { value: outcome.data };
-      io.messages.push({
-        role: 'tool',
-        tool_call_id: call.id,
-        name: tool.name,
-        content: JSON.stringify({
-          ...payload,
-          ...(outcome.cards?.length ? { cards: outcome.cards.map((c) => ({ productId: c.id, title: c.title })) } : {}),
-        }),
-      });
-    } catch (error) {
-      const message = (error as Error).message ?? String(error);
-      await this.ai.recordToolCall({
-        conversationId: io.conversationId,
-        messageId: io.assistantMessageId,
-        userId: ctx.userId,
-        toolName: tool.name,
-        args: call.arguments,
-        status: 'error',
-        error: message,
-        durationMs: Date.now() - startedAt,
-      });
-      yield { type: 'tool_result', toolName: tool.name, ok: false, brief: '执行失败：' + message };
-      io.messages.push({ role: 'tool', tool_call_id: call.id, name: tool.name, content: JSON.stringify({ error: message }) });
-    }
-  }
 
   /**
    * 用户点确认后真正执行写操作。
@@ -607,19 +350,6 @@ export class AgentService {
       // 写操作可能已经落库一半，让用户重试有重复写入的风险，宁可让他重新发起一次
       await this.ai.updatePendingAction(actionId, { status: 'failed', resultMessage: message });
       return { status: 'failed', summary: action.summary, message };
-    }
-  }
-
-  /** 把一条模型流包装成事件生成器，便于在上层做「失败重试 / 降级」 */
-  private async *streamOnce(
-    provider: LlmProvider,
-    messages: ChatMessage[],
-    specs: ToolSpec[],
-    signal?: AbortSignal,
-  ): AsyncGenerator<{ type: 'delta'; text: string } | { type: 'done'; result: ChatResult }, void, unknown> {
-    for await (const chunk of provider.chatStream(messages, specs, signal)) {
-      if (chunk.type === 'text') yield { type: 'delta', text: chunk.delta };
-      else yield { type: 'done', result: chunk.result };
     }
   }
 }

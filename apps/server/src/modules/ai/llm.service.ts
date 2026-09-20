@@ -2,6 +2,9 @@ import { Injectable, Logger, type OnModuleInit } from '@nestjs/common';
 import { MockProvider } from './provider/mock.provider.js';
 import { OpenAiCompatibleProvider } from './provider/openai-compatible.provider.js';
 import type { LlmProvider } from './provider/types.js';
+import { ChatOpenAI } from '@langchain/openai';
+import type { BaseChatModel } from '@langchain/core/language_models/chat_models';
+import { MockChatModel } from './langchain/mock-chat-model.js';
 import { LlmConfigService, type LlmRuntimeConfig } from './llm-config.service.js';
 
 /**
@@ -63,6 +66,35 @@ export class LlmService implements OnModuleInit {
   /** 真实模型挂了时的兜底实例 */
   mock(): LlmProvider {
     return new MockProvider();
+  }
+
+  // ==================== LangChain 模型（Agent 走这条路径）====================
+
+  /**
+   * 给 LangChain 的 createAgent 用的模型实例。
+   *
+   * 有 Key 时是 ChatOpenAI（走 OpenAI 兼容协议，所以 DeepSeek / 通义 / 智谱 共用同一份代码）；
+   * 没 Key 时是自定义的 MockChatModel —— 规则引擎被包成了 LangChain 认得的模型，
+   * 上层 Agent 完全感知不到差别。这就是「无 Key 也能完整演示」在框架下的实现方式。
+   */
+  chatModel(options: { streaming?: boolean } = {}): BaseChatModel {
+    const config = this.config.current;
+    const provider = this.current;
+    if (provider.isMock || !config.apiKey) return new MockChatModel();
+
+    return new ChatOpenAI({
+      apiKey: config.apiKey,
+      model: config.model,
+      streaming: options.streaming ?? true,
+      timeout: config.timeoutMs,
+      // 关键：baseURL 指向服务商的 OpenAI 兼容端点，换厂商只改配置、不改代码
+      configuration: { baseURL: config.baseUrl.replace(/\/+$/, '') },
+    }) as unknown as BaseChatModel;
+  }
+
+  /** 是否在降级模式运行（前端与后台据此展示） */
+  get isMockMode(): boolean {
+    return this.current.isMock || !this.config.current.apiKey;
   }
 
   status() {

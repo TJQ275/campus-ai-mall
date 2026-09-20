@@ -42,6 +42,11 @@ export class ToolRegistry {
     return [...this.tools.values()];
   }
 
+  /** 按场景过滤出工具本体（LangChain 适配器需要完整工具，不只是描述） */
+  toolsForScene(scene: AiContext['scene']): AiTool[] {
+    return this.list().filter((t) => !t.scenes || t.scenes.includes(scene));
+  }
+
   /** 按场景过滤出暴露给模型的工具定义 */
   specs(scene: AiContext['scene']): ToolSpec[] {
     return this.list()
