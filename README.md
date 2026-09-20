@@ -31,6 +31,12 @@
 
 <img src="docs/assets/agent-workflow.svg" alt="Agent 工作流" width="900">
 
+编排交给 **LangChain 的 `createAgent`**（底层 LangGraph），工具用 LangChain 的 `tool()` + Zod 定义，
+模型走 `ChatOpenAI`（所以换厂商只改配置）。**但产出仍是项目自己的 SSE 事件协议** —— 前端一行都没改。
+
+> **框架替不掉的部分，仍然自己实现**：两阶段写操作、作答前校验、按调用粒度记账、日预算闸门。
+> 迁移时验证过：LangChain 不提供这几样，换过去还是得自己写 —— 见 [docs/10](docs/10-AI评测与成本.md)。
+
 **校验阶段不是装饰。** 它用一组规则在回答发给用户之前把关，最关键的一条是 R1：
 「声称完成了写操作，但本轮既没调用写工具、也没有生成待确认动作」。
 
@@ -86,7 +92,9 @@ AI 想加购时只落一条待确认记录，用户点了确认才真正执行�
 | 管理后台 | Vue 3 + Vite + Element Plus + ECharts |
 | 后端 | NestJS 12 + TypeScript + Drizzle ORM |
 | 数据库 | PostgreSQL 16 + pgvector（本地开发默认 PGlite，零安装） |
-| 大模型 | 任意 OpenAI 兼容接口（DeepSeek / 通义 / Kimi / Ollama） |
+| **AI 编排** | **LangChain `createAgent`（底层 LangGraph）**—— 模型、工具、消息都走 LangChain |
+| AI 模型 | 任意 OpenAI 兼容接口（DeepSeek / 通义 / Kimi / Ollama），经 LangChain `ChatOpenAI` 调用 |
+| 重排服务 | Python + FastAPI（BM25 + RRF，纯算法不下载模型权重） |
 
 ## 零安装启动（推荐）
 
