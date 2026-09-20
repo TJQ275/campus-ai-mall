@@ -53,6 +53,7 @@ export class AgentService {
    *   两阶段写操作（tools.adapter 里拦截）、按调用粒度记账、作答前规则校验、预算闸门。
    */
   async *run(userId: number, input: AiChatInput, options: { signal?: AbortSignal } = {}): AsyncGenerator<AiEvent, void, unknown> {
+    const signal = options.signal;
     const started = Date.now();
     const user = await this.ai.loadUser(userId);
     const conversation = await this.ai.ensureConversation(userId, {
@@ -108,7 +109,7 @@ export class AgentService {
       yield* runLangChainAgent(
         {
           model, tools, systemPrompt: system, history: historyMessages,
-          userMessage: input.message, sink, toolLabels, maxToolRounds: MAX_TOOL_ROUNDS,
+          userMessage: input.message, sink, toolLabels, maxToolRounds: MAX_TOOL_ROUNDS, signal,
         },
         outcome,
       );

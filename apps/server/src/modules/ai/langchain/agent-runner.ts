@@ -33,6 +33,12 @@ export interface AgentRunOptions {
   toolLabels: Map<string, string>;
   /** 单轮最大工具轮次 */
   maxToolRounds?: number;
+  /**
+   * 客户端断开信号。SSE 场景必须传：
+   * 用户切走页面后，后续的模型调用和工具轮次都不该继续消耗 token。
+   * LangGraph 的 stream 配置直接接受标准 AbortSignal。
+   */
+  signal?: AbortSignal;
 }
 
 /** 运行产物：生成器没法直接 return 复杂值，用这个可变对象带出来 */
@@ -59,6 +65,8 @@ export async function* runLangChainAgent(
       streamMode: 'messages',
       // LangGraph 默认 25 步；这里按工具轮次换算（每轮 = 1 次模型 + 1 次工具）
       recursionLimit: ((opts.maxToolRounds ?? 6) + 2) * 2,
+      // 客户端断开时中止整张图的执行，不再继续付费调用
+      signal: opts.signal,
     },
   );
 
